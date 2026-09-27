@@ -1,0 +1,967 @@
+<title>DayBudget UIデモ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@500&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+:root{
+  --stage:#E8ECF2; --app-bg:#F7F8FB; --surface:#FFFFFF; --surface-2:#EEF1F6; --line:#DDE2EB;
+  --ink:#131A2B; --muted:#5F6980; --faint:#98A1B4;
+  --accent:#FFC53D; --accent-press:#F0B11C; --accent-ink:#241A02;
+  --great:#11905C; --healthy:#2B63DB; --warning:#B56C00; --over:#D5392F;
+  --shadow:0 1px 2px rgba(19,26,43,.06),0 10px 28px rgba(19,26,43,.07);
+  --display:"Bricolage Grotesque","Zen Kaku Gothic New",system-ui,sans-serif;
+  --body:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --stage:#080B11; --app-bg:#0F131C; --surface:#181D29; --surface-2:#212736; --line:#2B3243;
+    --ink:#EDF0F7; --muted:#9CA5B7; --faint:#687185;
+    --accent:#FFC53D; --accent-press:#F0B11C; --accent-ink:#241A02;
+    --great:#3CC98A; --healthy:#6F9DFF; --warning:#F2A93B; --over:#FF6B5E;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --stage:#080B11; --app-bg:#0F131C; --surface:#181D29; --surface-2:#212736; --line:#2B3243;
+  --ink:#EDF0F7; --muted:#9CA5B7; --faint:#687185;
+  --accent:#FFC53D; --accent-press:#F0B11C; --accent-ink:#241A02;
+  --great:#3CC98A; --healthy:#6F9DFF; --warning:#F2A93B; --over:#FF6B5E;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px rgba(0,0,0,.35);
+}
+/* アプリ内テーマ設定（設定画面から切り替え） */
+.phone[data-app="light"]{
+  color-scheme:light;
+  --app-bg:#F7F8FB; --surface:#FFFFFF; --surface-2:#EEF1F6; --line:#DDE2EB;
+  --ink:#131A2B; --muted:#5F6980; --faint:#98A1B4;
+  --great:#11905C; --healthy:#2B63DB; --warning:#B56C00; --over:#D5392F;
+  --shadow:0 1px 2px rgba(19,26,43,.06),0 10px 28px rgba(19,26,43,.07);
+}
+.phone[data-app="dark"]{
+  color-scheme:dark;
+  --app-bg:#0F131C; --surface:#181D29; --surface-2:#212736; --line:#2B3243;
+  --ink:#EDF0F7; --muted:#9CA5B7; --faint:#687185;
+  --great:#3CC98A; --healthy:#6F9DFF; --warning:#F2A93B; --over:#FF6B5E;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px rgba(0,0,0,.35);
+}
+
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{background:var(--stage);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.6;padding-inline:16px;padding-block:32px;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--healthy);outline-offset:2px}
+.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.num{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+
+/* ---------- ステージ ---------- */
+.stage{max-width:1040px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:56px;align-items:start}
+.guide{display:flex;flex-direction:column;gap:24px;padding-top:24px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px)}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0}
+.guide h1{font-family:var(--display);font-weight:800;font-size:44px;line-height:1;letter-spacing:-.03em;margin:8px 0 0}
+.guide h1 span{background:var(--accent);color:var(--accent-ink);padding:0 .12em;border-radius:6px}
+.lede{margin:0;color:var(--muted);max-width:36em;text-wrap:pretty}
+.screens{display:flex;flex-wrap:wrap;gap:8px}
+.screens button{padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-weight:500;font-size:13px;white-space:nowrap}
+.screens button[aria-current="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.legend h2{font-size:12px;font-weight:700;margin:0 0 10px;color:var(--muted)}
+.legend ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.legend li{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13px}
+.legend li small{color:var(--muted);display:block;font-size:11px;line-height:1.4}
+.sw{width:12px;height:12px;border-radius:50%;flex:none}
+.note{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;margin:0;max-width:40em}
+
+/* ---------- 端末フレーム ---------- */
+.phone{position:relative;width:100%;height:800px;background:var(--app-bg);color:var(--ink);border-radius:52px;border:11px solid #0B0E14;box-shadow:0 30px 80px rgba(10,14,22,.28);overflow:hidden;isolation:isolate}
+.statusbar{position:absolute;inset:0 0 auto 0;height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 30px;font-weight:700;font-size:14px;z-index:30;pointer-events:none}
+.statusbar .isl{position:absolute;left:50%;top:10px;translate:-50% 0;width:108px;height:30px;border-radius:20px;background:#0B0E14}
+.statusbar .bat{display:flex;gap:6px;align-items:center}
+.statusbar .bat i{display:block;width:24px;height:11px;border:1.5px solid currentColor;border-radius:3px;position:relative;opacity:.9}
+.statusbar .bat i::after{content:"";position:absolute;inset:1.5px 6px 1.5px 1.5px;background:currentColor;border-radius:1px}
+.screen{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;padding:54px 20px 120px;scrollbar-width:none}
+.screen::-webkit-scrollbar{display:none}
+.screen.enter{animation:enter .26s cubic-bezier(.2,.8,.2,1)}
+@keyframes enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* 共通パーツ */
+.topbar{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;min-height:48px;margin-bottom:8px}
+.topbar .t{text-align:center;line-height:1.25}
+.topbar .t b{display:block;font-size:15px}
+.topbar .t small{color:var(--muted);font-size:12px}
+.icon-btn{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;color:var(--ink)}
+.icon-btn:hover{background:var(--surface-2)}
+.section-h{display:flex;justify-content:space-between;align-items:baseline;margin:0 0 10px;font-size:13px;font-weight:700;color:var(--muted)}
+.section-h span{font-weight:500}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 8px;border-radius:999px;font-size:12px;font-weight:700;color:var(--st);background:color-mix(in srgb,var(--st) 13%,transparent)}
+.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.cat-ico{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:var(--c);background:color-mix(in srgb,var(--c) 15%,transparent);flex:none}
+.cat-ico .i{width:19px;height:19px}
+.primary{width:100%;height:56px;border-radius:18px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 6px 18px color-mix(in srgb,var(--accent) 45%,transparent)}
+.primary:active{background:var(--accent-press);transform:scale(.99)}
+.primary:disabled{opacity:.45;box-shadow:none;cursor:default}
+.ghost{width:100%;height:48px;border-radius:14px;font-weight:700;color:var(--muted)}
+.screen.has-dock{padding-bottom:0}
+.dock{position:sticky;bottom:0;margin:20px -20px 0;padding:16px 20px 28px;background:linear-gradient(to top,var(--app-bg) 62%,transparent);z-index:5}
+
+/* ---------- ダッシュボード ---------- */
+.hero{padding:18px 4px 6px;text-align:center}
+.hero-label{font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.04em}
+.big{font-family:var(--display);font-weight:800;font-size:78px;line-height:1.02;letter-spacing:-.045em;margin:6px 0 10px;color:var(--hero-c,var(--ink));font-variant-numeric:tabular-nums;transition:color .3s}
+.big .yen{font-size:.46em;font-weight:700;margin-right:.06em;vertical-align:.62em;letter-spacing:0}
+.big.pulse{animation:pulse .5s ease}
+@keyframes pulse{40%{transform:scale(.965)}}
+.meter{margin:18px 4px 0}
+.meter-track{height:10px;border-radius:99px;background:var(--surface-2);overflow:hidden}
+.meter-fill{height:100%;border-radius:99px;background:var(--st);transition:width .5s cubic-bezier(.2,.8,.2,1),background .3s}
+.meter-legend{display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--muted)}
+.meter-legend b{color:var(--ink);font-weight:700}
+.hint{margin:18px 0 0;padding:12px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--line);font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.hint span{color:var(--muted)}
+.hint b{font-family:var(--mono);font-size:14px;color:var(--great)}
+.period{margin:22px 0 0}
+.ticks{display:grid;grid-template-columns:repeat(30,minmax(0,1fr));gap:3px;align-items:end;height:22px}
+.ticks i{display:block;height:12px;border-radius:2px;background:var(--line)}
+.ticks i.g{background:var(--great);opacity:.75}
+.ticks i.r{background:var(--over);opacity:.8}
+.ticks i.today{height:22px;background:var(--accent);opacity:1}
+.ticks-legend{display:flex;justify-content:space-between;font-size:11px;color:var(--faint);margin-top:6px}
+.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:10px 8px 10px 10px;transition:opacity .25s,transform .25s}
+.row.out{opacity:0;transform:translateX(24px)}
+.row.new{animation:enter .35s ease}
+.row .meta{flex:1;min-width:0;line-height:1.35}
+.row .meta b{display:block;font-size:14px;font-weight:700}
+.row .meta small{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.row .amt{font-family:var(--mono);font-size:15px}
+.row .del{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:var(--faint)}
+.row .del:hover{color:var(--over);background:color-mix(in srgb,var(--over) 10%,transparent)}
+.row .del .i{width:17px;height:17px}
+.empty{padding:22px;text-align:center;color:var(--muted);border:1.5px dashed var(--line);border-radius:16px;font-size:13px}
+
+/* ---------- 入力シート ---------- */
+.backdrop{position:absolute;inset:0;background:rgba(8,11,18,.42);z-index:20;opacity:0;pointer-events:none;transition:opacity .25s}
+.backdrop.open{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:21;background:var(--surface);border-radius:28px 28px 0 0;padding:10px 18px 24px;transform:translateY(102%);transition:transform .32s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;gap:12px}
+.sheet.open{transform:none}
+.grab{width:40px;height:5px;border-radius:9px;background:var(--line);margin:0 auto}
+.sheet-head{display:flex;align-items:center;justify-content:space-between}
+.sheet-head b{font-size:16px}
+.date-chip{font-size:12px;font-weight:700;padding:5px 10px;border-radius:99px;background:var(--surface-2);color:var(--muted)}
+.amount{font-family:var(--display);font-weight:800;font-size:48px;letter-spacing:-.04em;text-align:center;line-height:1.1;font-variant-numeric:tabular-nums;padding:2px 0}
+.amount .yen{font-size:.55em;color:var(--muted);margin-right:4px;vertical-align:.3em}
+.amount.zero{color:var(--faint)}
+.caret{display:inline-block;width:3px;height:.8em;background:var(--accent);margin-left:4px;vertical-align:-.04em;border-radius:2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.cats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.cat{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:14px;border:1.5px solid var(--line);font-size:12px;font-weight:700;text-align:left;line-height:1.2}
+.cat .cat-ico{width:30px;height:30px;border-radius:9px}
+.cat .cat-ico .i{width:16px;height:16px}
+.cat[aria-pressed="true"]{border-color:var(--c);background:color-mix(in srgb,var(--c) 9%,transparent)}
+.memo{height:42px;border-radius:12px;border:1px solid var(--line);background:var(--app-bg);padding:0 14px;font:inherit;color:var(--ink);width:100%}
+.memo::placeholder{color:var(--faint)}
+.keys{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.key{height:50px;border-radius:14px;background:var(--surface-2);font-family:var(--display);font-size:22px;font-weight:700;display:grid;place-items:center;transition:transform .08s,background .12s}
+.key:active{transform:scale(.95);background:var(--line)}
+.toast{position:absolute;left:20px;right:20px;bottom:104px;z-index:25;background:var(--ink);color:var(--app-bg);border-radius:14px;padding:12px 14px;font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:var(--shadow);transform:translateY(12px);opacity:0;pointer-events:none;transition:all .25s}
+.toast.show{opacity:1;transform:none;pointer-events:auto}
+.toast button{font-weight:700;color:var(--accent)}
+
+/* ---------- 履歴 ---------- */
+.month-switch{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:4px}
+.month-switch .t{text-align:center;line-height:1.25}
+.month-switch .t b{display:block;font-size:15px}
+.month-switch .t small{font-size:12px;color:var(--muted)}
+.month-switch .icon-btn{width:38px;height:38px;border-radius:10px}
+.month-switch .icon-btn[disabled]{opacity:.3;cursor:default}
+.summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:12px 0 18px;background:var(--surface);border:1px solid var(--line);border-radius:16px}
+.summary div{padding:12px 10px;line-height:1.3}
+.summary div+div{border-left:1px solid var(--line)}
+.summary small{display:block;font-size:11px;color:var(--muted);font-weight:500;margin-bottom:4px}
+.summary b{font-family:var(--mono);font-size:14px;font-weight:500}
+.summary .plus{color:var(--great)}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.cal .wd{font-size:11px;font-weight:700;text-align:center;color:var(--faint);padding-bottom:2px}
+.cal .wd.sun{color:color-mix(in srgb,var(--over) 70%,var(--faint))}
+.cal .wd.sat{color:color-mix(in srgb,var(--healthy) 70%,var(--faint))}
+.day{aspect-ratio:1/1.12;max-width:100%;border-radius:10px;background:var(--surface);border:1px solid var(--line);padding:5px 3px 4px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;line-height:1}
+.day .d{font-size:12px;font-weight:700}
+.day .a{font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:-.03em}
+.day .dot{width:6px;height:6px;border-radius:50%;background:transparent}
+.day.g .dot{background:var(--great)}
+.day.r .dot{background:var(--over)}
+.day.future{background:transparent;border-style:dashed;opacity:.55;cursor:default}
+.day.today{border:2px solid var(--accent)}
+.day[aria-pressed="true"]{background:var(--ink);border-color:var(--ink)}
+.day[aria-pressed="true"] .d,.day[aria-pressed="true"] .a{color:var(--app-bg)}
+.day.blank{visibility:hidden}
+.cal-legend{display:flex;gap:14px;justify-content:flex-end;margin:10px 2px 18px;font-size:11px;color:var(--muted)}
+.cal-legend span{display:flex;align-items:center;gap:5px}
+.cal-legend i{width:6px;height:6px;border-radius:50%;display:block}
+.day-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.day-head b{font-size:15px}
+.day-head small{font-size:12px;color:var(--muted)}
+
+/* ---------- 設定 ---------- */
+.pro-card{border-radius:20px;padding:16px;background:var(--ink);color:var(--app-bg);display:flex;align-items:center;gap:14px;margin:4px 0 22px;text-align:left;width:100%}
+.pro-card .badge{width:44px;height:44px;border-radius:14px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;flex:none}
+.pro-card div{flex:1;line-height:1.35}
+.pro-card b{font-size:15px;display:block}
+.pro-card small{font-size:12px;opacity:.7}
+.pro-card .price{font-family:var(--mono);font-size:13px;padding:6px 10px;border-radius:10px;background:color-mix(in srgb,var(--app-bg) 14%,transparent)}
+.group{margin:0 0 22px}
+.group h3{font-size:12px;font-weight:700;color:var(--muted);margin:0 0 8px 6px;letter-spacing:.04em}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;min-height:52px;width:100%;text-align:left}
+.item+.item,.item+.sub,.sub+.item{border-top:1px solid var(--line)}
+.item .v{display:flex;align-items:center;gap:4px;color:var(--muted);font-family:var(--mono);font-size:13px}
+.item .v .i{width:16px;height:16px}
+.item.danger{color:var(--over);font-weight:700}
+.sub{padding:12px 14px}
+.sub p{margin:8px 2px 0;font-size:12px;color:var(--muted);line-height:1.55}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:var(--surface-2);border-radius:12px;padding:3px;gap:3px}
+.seg button{height:36px;border-radius:9px;font-size:13px;font-weight:700;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:5px}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.seg .i{width:13px;height:13px}
+.pro-tag{font-family:var(--mono);font-size:9px;font-weight:500;padding:1px 5px;border-radius:5px;background:var(--accent);color:var(--accent-ink);letter-spacing:.04em}
+.swatches{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.swatch{border-radius:14px;border:1.5px solid var(--line);padding:8px;display:flex;flex-direction:column;gap:6px;align-items:center;font-size:12px;font-weight:700}
+.swatch[aria-pressed="true"]{border-color:var(--ink)}
+.swatch .pv{width:100%;aspect-ratio:1.5/1;border-radius:9px;display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:15px;position:relative}
+.swatch .pv .i{position:absolute;right:5px;top:5px;width:13px;height:13px}
+.foot{text-align:center;font-size:11px;color:var(--faint);line-height:1.7;margin-top:8px}
+
+/* ---------- ペイウォール ---------- */
+.pw-top{display:flex;justify-content:flex-end;margin-bottom:4px}
+.pw-art{height:150px;position:relative;margin:0 0 18px}
+.pw-art .w{position:absolute;width:118px;height:118px;box-shadow:0 14px 30px rgba(0,0,0,.2)}
+.pw-art .w:nth-child(1){left:calc(50% - 160px);top:22px;rotate:-9deg}
+.pw-art .w:nth-child(2){left:calc(50% - 59px);top:6px;z-index:2}
+.pw-art .w:nth-child(3){left:calc(50% + 42px);top:22px;rotate:9deg}
+.pw h2{font-family:var(--body);font-size:24px;font-weight:700;line-height:1.35;text-align:center;margin:0;text-wrap:balance;letter-spacing:-.01em}
+.pw .sub-copy{text-align:center;color:var(--muted);font-size:13px;margin:8px 0 18px}
+.cmp{width:100%;border-collapse:separate;border-spacing:0;background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;font-size:13px}
+.cmp th,.cmp td{padding:11px 10px;text-align:center;border-bottom:1px solid var(--line)}
+.cmp tr:last-child td{border-bottom:0}
+.cmp th{font-size:11px;color:var(--muted);font-weight:700;background:var(--surface-2)}
+.cmp th:first-child,.cmp td:first-child{text-align:left;padding-left:14px}
+.cmp .pro-col{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.cmp th.pro-col{color:var(--ink)}
+.cmp .yes{color:var(--great)}
+.cmp .no{color:var(--faint)}
+.cmp .i{width:17px;height:17px;display:inline-block;vertical-align:middle}
+.pw-foot{display:flex;justify-content:center;gap:16px;margin-top:14px;font-size:12px;color:var(--muted)}
+.pw-foot button{text-decoration:underline;text-underline-offset:3px}
+.pw-price-note{text-align:center;font-size:11px;color:var(--faint);margin:10px 0 0}
+
+/* ---------- オンボーディング ---------- */
+.ob{display:flex;flex-direction:column;min-height:100%}
+.steps{display:flex;gap:6px;justify-content:center;margin:6px 0 26px}
+.steps i{width:22px;height:5px;border-radius:9px;background:var(--line);display:block;transition:all .25s}
+.steps i.on{width:40px;background:var(--ink)}
+.ob h2{font-size:25px;line-height:1.35;margin:0 0 8px;font-weight:700;text-wrap:balance;letter-spacing:-.01em}
+.ob p.lead{color:var(--muted);margin:0 0 22px;font-size:14px}
+.ob-demo{border-radius:26px;background:var(--surface);border:1px solid var(--line);padding:26px 18px 20px;text-align:center;margin:10px 0 26px;box-shadow:var(--shadow)}
+.ob-demo .big{font-size:64px;margin:4px 0 8px}
+.points{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:14px}
+.points li{display:flex;gap:12px;align-items:flex-start;line-height:1.45}
+.points li .cat-ico{--c:var(--ink);width:34px;height:34px;border-radius:10px}
+.points b{display:block;font-size:14px}
+.points small{color:var(--muted);font-size:12px}
+.budget-field{display:flex;align-items:baseline;justify-content:center;gap:4px;border-bottom:2px solid var(--ink);padding:4px 0 8px;margin:10px 20px 18px}
+.budget-field span{font-family:var(--display);font-size:30px;font-weight:700;color:var(--muted)}
+.budget-field input{width:100%;max-width:220px;border:0;background:transparent;font-family:var(--display);font-weight:800;font-size:52px;letter-spacing:-.04em;color:var(--ink);text-align:center;font-variant-numeric:tabular-nums;padding:0}
+.budget-field input:focus-visible{outline:none}
+.presets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.presets button,.days button{height:44px;border-radius:12px;border:1.5px solid var(--line);font-weight:700;font-size:14px;background:var(--surface)}
+.presets button[aria-pressed="true"],.days button[aria-pressed="true"]{border-color:var(--ink);background:var(--ink);color:var(--app-bg)}
+.days{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.preview{margin-top:18px;border-radius:18px;background:var(--surface);border:1px solid var(--line);padding:14px 16px;display:grid;gap:10px}
+.preview div{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.preview span{color:var(--muted)}
+.preview b{font-family:var(--mono);font-weight:500}
+.ob-actions{margin-top:auto;padding-top:26px;display:flex;flex-direction:column;gap:6px}
+.privacy{display:flex;gap:8px;align-items:center;justify-content:center;font-size:11px;color:var(--muted);margin-top:4px}
+.privacy .i{width:14px;height:14px}
+
+/* ---------- ホーム画面（ウィジェット） ---------- */
+.home{padding:58px 18px 30px;background:linear-gradient(165deg,#F6C28B 0%,#E98A6A 34%,#4F6A8F 78%,#2C3E5C 100%)}
+.home-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px 14px}
+.w-s{grid-column:span 2;aspect-ratio:1/1}
+.w-m{grid-column:span 4;aspect-ratio:2.1/1}
+.app{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:10.5px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.3)}
+.app i{width:100%;max-width:58px;aspect-ratio:1;border-radius:14px;background:rgba(255,255,255,.28);display:block;backdrop-filter:blur(6px)}
+.app i.db{background:var(--accent);display:grid;place-items:center;font-style:normal;font-family:var(--display);font-weight:800;font-size:26px;color:var(--accent-ink);text-shadow:none}
+.home-bar{position:sticky;top:0;z-index:3;display:flex;justify-content:center;margin-bottom:18px}
+.home-bar .seg{background:rgba(255,255,255,.25);backdrop-filter:blur(10px)}
+.home-bar .seg button{color:#fff;padding:0 12px}
+.home-bar .seg button[aria-pressed="true"]{background:#fff;color:#131A2B}
+.home-note{margin-top:22px;text-align:center;font-size:11px;color:rgba(255,255,255,.88);background:rgba(0,0,0,.22);border-radius:12px;padding:8px 12px;line-height:1.5}
+
+/* ウィジェット本体（テーマ固定色） */
+.w{border-radius:22px;padding:14px;display:flex;gap:14px;overflow:hidden;--wg:#3CC98A}
+.w .wl{display:flex;flex-direction:column;justify-content:space-between;flex:1;min-width:0}
+.w .wlab{font-size:11px;font-weight:700;opacity:.72}
+.w .wnum{font-family:var(--display);font-weight:800;font-size:32px;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums}
+.w .wnum small{font-size:.55em;margin-right:1px;vertical-align:.35em}
+.w .wbar{height:6px;border-radius:9px;overflow:hidden}
+.w .wbar i{display:block;height:100%;width:18%;border-radius:9px;background:var(--wg)}
+.w .wfoot{display:flex;justify-content:space-between;align-items:center;font-size:10px;font-weight:700;gap:6px}
+.w .wchip{padding:2px 7px;border-radius:99px;color:var(--wg)}
+.w .wr{flex:1.1;border-left:1px solid;padding-left:14px;display:flex;flex-direction:column;justify-content:space-between;font-size:11px;min-width:0}
+.w .wr ul{list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:5px}
+.w .wr li{display:flex;justify-content:space-between;gap:6px}
+.w .wr li span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.w .wr .pace b{display:block;font-family:var(--mono);font-size:15px;font-weight:500;color:var(--wg)}
+.w .mono{font-size:11px}
+.w[data-wt="dark"]{background:#121726;color:#F1F3F9}
+.w[data-wt="dark"] .wbar{background:#262D40}
+.w[data-wt="dark"] .wchip{background:rgba(60,201,138,.16)}
+.w[data-wt="dark"] .wr{border-color:#262D40}
+.w[data-wt="white"]{background:#FFFFFF;color:#131A2B;--wg:#11905C}
+.w[data-wt="white"] .wbar{background:#EDF0F5}
+.w[data-wt="white"] .wchip{background:rgba(17,144,92,.12)}
+.w[data-wt="white"] .wr{border-color:#E4E8EF}
+.w[data-wt="neon"]{background:#0D0620;color:#F7EDFF;--wg:#39E6FF;box-shadow:inset 0 0 0 1.5px rgba(255,79,216,.55),0 0 24px rgba(255,79,216,.25)}
+.w[data-wt="neon"] .wnum{color:#FF5FDC;text-shadow:0 0 14px rgba(255,79,216,.65)}
+.w[data-wt="neon"] .wbar{background:#251A45}
+.w[data-wt="neon"] .wbar i{box-shadow:0 0 10px #39E6FF}
+.w[data-wt="neon"] .wchip{background:rgba(57,230,255,.14)}
+.w[data-wt="neon"] .wr{border-color:#2B1E52}
+
+/* ---------- モーダル ---------- */
+.dialog{position:absolute;left:24px;right:24px;top:50%;translate:0 -50%;z-index:22;background:var(--surface);border-radius:22px;padding:22px 20px 16px;box-shadow:var(--shadow);text-align:center;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;transform:scale(.96)}
+.dialog.open{opacity:1;pointer-events:auto;transform:none}
+.dialog b{font-size:16px;display:block;margin-bottom:6px}
+.dialog p{margin:0 0 16px;color:var(--muted);font-size:13px}
+.dialog .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dialog .btns button{height:46px;border-radius:12px;font-weight:700;background:var(--surface-2)}
+.dialog .btns .red{background:var(--over);color:#fff}
+
+@media (max-width:860px){
+  body{padding-block:16px}
+  .stage{grid-template-columns:1fr;gap:18px;max-width:430px}
+  .guide{position:static;padding-top:0;gap:14px}
+  .guide h1{font-size:32px}
+  .screens{flex-wrap:nowrap;overflow-x:auto;margin-inline:-16px;padding-inline:16px;scrollbar-width:none}
+  .legend,.note.long{display:none}
+  .phone{height:max(660px,calc(100dvh - 190px));border-width:0;border-radius:30px;box-shadow:var(--shadow)}
+  .statusbar{display:none}
+  .screen{padding-top:14px}
+  .home{padding-top:18px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M21 5H8l-6 7 6 7h13a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="m16 9-5 6M11 9l5 6"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17l.7 1.8 1.8.7-1.8.7L19 22l-.7-1.8-1.8-.7 1.8-.7z"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+  <symbol id="i-tap" viewBox="0 0 24 24"><path d="M9 11V5a2 2 0 0 1 4 0v5l4.5.9a2 2 0 0 1 1.6 2.3L18 19a3 3 0 0 1-3 2.5h-3.3a3 3 0 0 1-2.4-1.2L5.6 15a1.8 1.8 0 0 1 2.7-2.4L9 13.4"/></symbol>
+  <symbol id="i-roll" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.5 6.2L3 16M3 21v-5h5"/></symbol>
+  <symbol id="c-food" viewBox="0 0 24 24"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></symbol>
+  <symbol id="c-cafe" viewBox="0 0 24 24"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><path d="M6 2v2M10 2v2M14 2v2"/></symbol>
+  <symbol id="c-daily" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></symbol>
+  <symbol id="c-transport" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="16" rx="3"/><path d="M4 11h16M12 3v8M8 19l-2 3M18 22l-2-3M8 15h.01M16 15h.01"/></symbol>
+  <symbol id="c-fun" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="3"/><path d="M6 12h4M8 10v4M15 13h.01M18 11h.01"/></symbol>
+  <symbol id="c-other" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
+</svg>
+
+<div class="stage">
+  <aside class="guide">
+    <div>
+      <p class="eyebrow">UI/UX デモ · Web版 v0.1</p>
+      <h1>Day<span>Budget</span></h1>
+    </div>
+    <p class="lede">「今日あといくら使えるか」だけを見るための家計アプリの画面デモです。まだ計算やデータ保存はつないでいません。金額はすべてサンプル（9月度・予算 ¥50,000・今日は 9/27）です。</p>
+    <nav class="screens" id="screenNav" aria-label="画面を切り替え">
+      <button data-go="onboarding">オンボーディング</button>
+      <button data-go="dashboard">ダッシュボード</button>
+      <button data-go="input">支出を記録</button>
+      <button data-go="history">履歴</button>
+      <button data-go="settings">設定</button>
+      <button data-go="paywall">Pro版</button>
+      <button data-go="home">ウィジェット</button>
+    </nav>
+    <div class="legend">
+      <h2>状態の色（今日の予算に対する使用率）</h2>
+      <ul>
+        <li><i class="sw" style="background:var(--great)"></i><div>超順調！<small>50%未満</small></div></li>
+        <li><i class="sw" style="background:var(--healthy)"></i><div>計画通り<small>50〜80%</small></div></li>
+        <li><i class="sw" style="background:var(--warning)"></i><div>使いすぎ注意<small>80〜100%</small></div></li>
+        <li><i class="sw" style="background:var(--over)"></i><div>予算オーバー<small>100%超</small></div></li>
+      </ul>
+    </div>
+    <p class="note long">画面の中のボタンも操作できます。テンキーで金額を入れて「決定」を押すと、残額と状態の色が変わります。ホーム画面ウィジェットはWebでは作れないため、iOS版で提供する想定のデザイン案として載せています。</p>
+  </aside>
+
+  <main>
+    <div class="phone" id="phone" data-app="system">
+      <div class="statusbar" aria-hidden="true"><span>9:41</span><span class="isl"></span><span class="bat"><i></i></span></div>
+
+      <!-- オンボーディング -->
+      <section class="screen" data-screen="onboarding" hidden>
+        <div class="ob" id="ob"></div>
+      </section>
+
+      <!-- ダッシュボード -->
+      <section class="screen has-dock" data-screen="dashboard" hidden>
+        <header class="topbar">
+          <button class="icon-btn" data-go="settings" aria-label="設定"><svg class="i"><use href="#i-sliders"/></svg></button>
+          <div class="t"><b>9月度</b><small class="num">9/1〜9/30 · 残り4日</small></div>
+          <button class="icon-btn" data-go="history" aria-label="履歴"><svg class="i"><use href="#i-cal"/></svg></button>
+        </header>
+
+        <div class="hero">
+          <div class="hero-label">今日使えるお金</div>
+          <div class="big" id="bigNum"><span class="yen">¥</span><span id="bigVal">2,450</span></div>
+          <span class="chip" id="statusChip">超順調！</span>
+        </div>
+
+        <div class="meter">
+          <div class="meter-track"><div class="meter-fill" id="meterFill"></div></div>
+          <div class="meter-legend"><span>本日の支出 <b class="mono" id="spentTxt">¥550</b></span><span>本日の割当 <b class="mono">¥3,000</b></span></div>
+        </div>
+
+        <div class="hint"><span>このあと使わなければ、明日は</span><b id="tomorrowTxt">¥3,816</b></div>
+
+        <div class="period">
+          <div class="section-h">9月度の歩み <span class="mono" id="monthLeft">残り ¥11,450</span></div>
+          <div class="ticks" id="ticks"></div>
+          <div class="ticks-legend"><span>9/1</span><span>9/30</span></div>
+        </div>
+
+        <div style="margin-top:24px">
+          <div class="section-h">今日の支出 <span id="countTxt">2件</span></div>
+          <ul class="list" id="todayList"></ul>
+        </div>
+
+        <div class="dock"><button class="primary" id="openSheet"><svg class="i"><use href="#i-plus"/></svg>支出を記録</button></div>
+      </section>
+
+      <!-- 履歴 -->
+      <section class="screen" data-screen="history" hidden>
+        <header class="topbar">
+          <button class="icon-btn" data-go="dashboard" aria-label="戻る"><svg class="i"><use href="#i-left"/></svg></button>
+          <div class="t"><b>履歴</b></div><span></span>
+        </header>
+        <div class="month-switch">
+          <button class="icon-btn" aria-label="前の月度"><svg class="i"><use href="#i-left"/></svg></button>
+          <div class="t"><b>9月度</b><small class="num">9/1〜9/30</small></div>
+          <button class="icon-btn" aria-label="次の月度" disabled><svg class="i"><use href="#i-right"/></svg></button>
+        </div>
+        <div class="summary">
+          <div><small>今月の予算</small><b>¥50,000</b></div>
+          <div><small>累計支出</small><b id="sumSpent">¥38,550</b></div>
+          <div><small>ペースより</small><b class="plus" id="sumPace">+¥6,450</b></div>
+        </div>
+        <div class="cal" id="cal"></div>
+        <div class="cal-legend"><span><i style="background:var(--great)"></i>予算内</span><span><i style="background:var(--over)"></i>超過</span></div>
+        <div class="day-head"><b id="dayTitle"></b><small id="dayMeta" class="num"></small></div>
+        <ul class="list" id="dayList"></ul>
+      </section>
+
+      <!-- 設定 -->
+      <section class="screen" data-screen="settings" hidden>
+        <header class="topbar">
+          <button class="icon-btn" data-go="dashboard" aria-label="戻る"><svg class="i"><use href="#i-left"/></svg></button>
+          <div class="t"><b>設定</b></div><span></span>
+        </header>
+        <button class="pro-card" data-go="paywall">
+          <span class="badge"><svg class="i"><use href="#i-spark"/></svg></span>
+          <div><b>DayBudget Pro</b><small>ウィジェット着せ替え・貯金プール・CSV</small></div>
+          <span class="price">¥1,000</span>
+        </button>
+
+        <div class="group"><h3>予算</h3>
+          <div class="panel">
+            <button class="item" data-toast="デモでは変更できません"><span>月の予算</span><span class="v">¥50,000<svg class="i"><use href="#i-right"/></svg></span></button>
+            <button class="item" data-toast="デモでは変更できません"><span>締め日</span><span class="v">月末<svg class="i"><use href="#i-right"/></svg></span></button>
+            <div class="sub">
+              <div class="seg" id="carrySeg">
+                <button aria-pressed="true">均等配分</button>
+                <button aria-pressed="false" data-go="paywall">貯金プール <span class="pro-tag">PRO</span></button>
+              </div>
+              <p>使わなかった分は、翌日以降の予算に均等に上乗せされます。使いすぎた分は翌日以降から均等に差し引かれます。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="group"><h3>表示</h3>
+          <div class="panel"><div class="sub">
+            <div class="seg" id="themeSeg">
+              <button aria-pressed="true" data-theme-set="system">自動</button>
+              <button aria-pressed="false" data-theme-set="light">ライト</button>
+              <button aria-pressed="false" data-theme-set="dark">ダーク</button>
+            </div>
+          </div></div>
+        </div>
+
+        <div class="group"><h3>ウィジェット（iOS版）</h3>
+          <div class="panel"><div class="sub">
+            <div class="swatches">
+              <button class="swatch" aria-pressed="true"><span class="pv w" data-wt="dark" style="padding:0">¥2,450</span>ダーク</button>
+              <button class="swatch" aria-pressed="false" data-go="paywall"><span class="pv w" data-wt="white" style="padding:0;box-shadow:inset 0 0 0 1px #DDE2EB">¥2,450<svg class="i"><use href="#i-lock"/></svg></span>ホワイト</button>
+              <button class="swatch" aria-pressed="false" data-go="paywall"><span class="pv w" data-wt="neon" style="padding:0">¥2,450<svg class="i"><use href="#i-lock"/></svg></span>ネオン</button>
+            </div>
+          </div></div>
+        </div>
+
+        <div class="group"><h3>データ</h3>
+          <div class="panel">
+            <button class="item" data-go="paywall"><span>CSVで書き出す</span><span class="v"><span class="pro-tag">PRO</span><svg class="i"><use href="#i-right"/></svg></span></button>
+            <button class="item danger" id="resetBtn"><span>すべてのデータを消去</span></button>
+          </div>
+        </div>
+        <p class="foot">DayBudget 0.1.0（デモ）<br>記録はこの端末の中だけに保存され、外部には送信されません。</p>
+      </section>
+
+      <!-- ペイウォール -->
+      <section class="screen pw has-dock" data-screen="paywall" hidden>
+        <div class="pw-top"><button class="icon-btn" data-go="settings" aria-label="閉じる"><svg class="i"><use href="#i-x"/></svg></button></div>
+        <div class="pw-art" aria-hidden="true">
+          <div class="w" data-wt="white"><div class="wl"><span class="wlab">今日使えるお金</span><span class="wnum"><small>¥</small>2,450</span><div class="wbar"><i></i></div></div></div>
+          <div class="w" data-wt="dark"><div class="wl"><span class="wlab">今日使えるお金</span><span class="wnum"><small>¥</small>2,450</span><div class="wbar"><i></i></div></div></div>
+          <div class="w" data-wt="neon"><div class="wl"><span class="wlab">今日使えるお金</span><span class="wnum"><small>¥</small>2,450</span><div class="wbar"><i></i></div></div></div>
+        </div>
+        <h2>一度の購入で、ずっと快適に。</h2>
+        <p class="sub-copy">月額課金はありません。1回買えば、この先ずっと使えます。</p>
+        <table class="cmp">
+          <thead><tr><th>機能</th><th>無料</th><th class="pro-col">Pro</th></tr></thead>
+          <tbody>
+            <tr><td>日割り計算・支出の記録</td><td class="yes"><svg class="i"><use href="#i-check"/></svg></td><td class="pro-col yes"><svg class="i"><use href="#i-check"/></svg></td></tr>
+            <tr><td>ウィジェット（小・基本テーマ）</td><td class="yes"><svg class="i"><use href="#i-check"/></svg></td><td class="pro-col yes"><svg class="i"><use href="#i-check"/></svg></td></tr>
+            <tr><td>ウィジェット全サイズ・着せ替え</td><td class="no"><svg class="i"><use href="#i-minus"/></svg></td><td class="pro-col yes"><svg class="i"><use href="#i-check"/></svg></td></tr>
+            <tr><td>貯金プールモード</td><td class="no"><svg class="i"><use href="#i-minus"/></svg></td><td class="pro-col yes"><svg class="i"><use href="#i-check"/></svg></td></tr>
+            <tr><td>CSVで書き出し</td><td class="no"><svg class="i"><use href="#i-minus"/></svg></td><td class="pro-col yes"><svg class="i"><use href="#i-check"/></svg></td></tr>
+          </tbody>
+        </table>
+        <div class="dock">
+          <button class="primary" data-toast="デモでは購入できません">¥1,000 で永久解放（買い切り）</button>
+          <div class="pw-foot"><button data-toast="デモでは復元できません">購入を復元</button><button data-toast="準備中です">利用規約</button><button data-toast="準備中です">プライバシー</button></div>
+        </div>
+      </section>
+
+      <!-- ホーム画面（ウィジェット） -->
+      <section class="screen home" data-screen="home" hidden>
+        <div class="home-bar">
+          <div class="seg" id="wtSeg">
+            <button aria-pressed="true" data-wt-set="dark">ダーク</button>
+            <button aria-pressed="false" data-wt-set="white">ホワイト</button>
+            <button aria-pressed="false" data-wt-set="neon">ネオン</button>
+          </div>
+        </div>
+        <div class="home-grid">
+          <div class="w w-s wdg" data-wt="dark">
+            <div class="wl">
+              <span class="wlab">今日使えるお金</span>
+              <span class="wnum"><small>¥</small><span class="wval">2,450</span></span>
+              <div>
+                <div class="wbar"><i class="wfill"></i></div>
+                <div class="wfoot" style="margin-top:7px"><span class="wchip">超順調</span><span class="mono" style="opacity:.6">9/27</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="app"><i></i>カメラ</div>
+          <div class="app"><i></i>写真</div>
+          <div class="app"><i class="db">¥</i>DayBudget</div>
+          <div class="app"><i></i>マップ</div>
+          <div class="w w-m wdg" data-wt="dark">
+            <div class="wl">
+              <span class="wlab">今日使えるお金</span>
+              <span class="wnum"><small>¥</small><span class="wval">2,450</span></span>
+              <div>
+                <div class="wbar"><i class="wfill"></i></div>
+                <div class="wfoot" style="margin-top:7px"><span class="wchip">超順調</span><span style="opacity:.6">割当 ¥3,000</span></div>
+              </div>
+            </div>
+            <div class="wr">
+              <div>
+                <span class="wlab" style="font-size:11px">今日の支出</span>
+                <ul class="wrecent"></ul>
+              </div>
+              <div class="pace"><span style="opacity:.7">今月の節約ペース</span><b>+¥6,450</b></div>
+            </div>
+          </div>
+          <div class="app"><i></i>メモ</div>
+          <div class="app"><i></i>時計</div>
+          <div class="app"><i></i>天気</div>
+          <div class="app"><i></i>設定</div>
+        </div>
+        <p class="home-note">ホーム画面ウィジェットはiOS版で提供する予定です。Web版ではホーム画面に追加して、アプリのように起動できます。</p>
+      </section>
+
+      <!-- 入力シート -->
+      <div class="backdrop" id="backdrop"></div>
+      <div class="sheet" id="sheet" role="dialog" aria-label="支出を記録" aria-hidden="true">
+        <div class="grab"></div>
+        <div class="sheet-head"><b>支出を記録</b><span class="date-chip">今日 9/27(日)</span><button class="icon-btn" id="closeSheet" aria-label="閉じる" style="width:36px;height:36px"><svg class="i"><use href="#i-x"/></svg></button></div>
+        <div class="amount zero" id="amount"><span class="yen">¥</span><span id="amountVal">0</span><span class="caret"></span></div>
+        <div class="cats" id="cats"></div>
+        <input class="memo" id="memo" type="text" placeholder="メモ（任意）例：コンビニ" maxlength="40" autocomplete="off">
+        <div class="keys" id="keys"></div>
+        <button class="primary" id="decide" disabled>決定</button>
+      </div>
+
+      <div class="dialog" id="dialog" role="alertdialog" aria-label="データの消去">
+        <b>すべてのデータを消去しますか？</b>
+        <p>支出の記録と予算の設定がすべて消えます。元に戻すことはできません。</p>
+        <div class="btns"><button id="dlgCancel">キャンセル</button><button class="red" id="dlgOk">消去する</button></div>
+      </div>
+
+      <div class="toast" id="toast"><span id="toastMsg"></span><button id="toastAct" hidden>元に戻す</button></div>
+    </div>
+  </main>
+</div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const $$ = s => [...document.querySelectorAll(s)];
+  const yen = n => (n < 0 ? '−¥' : '¥') + Math.abs(n).toLocaleString('ja-JP');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const CATS = [
+    { id:'food', name:'食費', c:'#E9803A' },
+    { id:'cafe', name:'カフェ・軽食', c:'#A86B3C' },
+    { id:'daily', name:'日用品', c:'#2F9A97' },
+    { id:'transport', name:'交通費', c:'#4F6BD8' },
+    { id:'fun', name:'娯楽', c:'#C454A8' },
+    { id:'other', name:'その他', c:'#7B8494' },
+  ];
+  const cat = id => CATS.find(c => c.id === id);
+  const ico = (id, cls='cat-ico') => `<span class="${cls}" style="--c:${cat(id).c}"><svg class="i"><use href="#c-${id}"/></svg></span>`;
+
+  // サンプルデータ（9月度: 9/1〜9/30、予算 ¥50,000、今日 = 9/27）
+  const BUDGET = 50000, DAYS = 30, TODAY = 27;
+  const PAST = [1200,1850,980,2400,3100,0,1520,1340,760,2100,1890,2620,650,1100,1480,1720,900,2650,1300,0,1150,1640,980,2210,1560,900];
+  const REMAIN_AT_TODAY = BUDGET - PAST.reduce((a,b)=>a+b,0);   // 12,000
+  const DAILY = Math.floor(REMAIN_AT_TODAY / (DAYS - TODAY + 1)); // 3,000
+  const MEMOS = { food:['スーパー','ランチ','夕飯の材料'], cafe:['コーヒー','コンビニおやつ'], daily:['洗剤','ティッシュ'], transport:['バス','電車'], fun:['映画','本'], other:['手数料'] };
+
+  let today = [
+    { id:1, cat:'cafe', memo:'コーヒー', time:'8:12', amt:330 },
+    { id:2, cat:'daily', memo:'ティッシュ', time:'12:40', amt:220 },
+  ];
+  let nextId = 3, shown = null, wTheme = 'dark', selDay = 26;
+
+  const spent = () => today.reduce((a,e)=>a+e.amt,0);
+  const statusOf = (s, d) => {
+    const r = d > 0 ? s / d : (s > 0 ? 2 : 0.9);
+    if (r < .5) return ['great','超順調！','超順調'];
+    if (r < .8) return ['healthy','計画通り','計画通り'];
+    if (r <= 1) return ['warning','使いすぎ注意','注意'];
+    return ['over','予算オーバー','オーバー'];
+  };
+  function dayBudgets(){
+    let rem = BUDGET; const out = [];
+    for (let d = 1; d <= DAYS; d++){
+      const db = Math.floor(rem / (DAYS - d + 1));
+      const amt = d < TODAY ? PAST[d-1] : d === TODAY ? spent() : null;
+      out.push({ d, db, amt });
+      if (amt != null && d < TODAY) rem -= amt;
+    }
+    return out;
+  }
+
+  /* ---------- 画面切り替え ---------- */
+  const screens = $$('.screen');
+  function go(name){
+    const target = name === 'input' ? 'dashboard' : name;
+    screens.forEach(s => {
+      const on = s.dataset.screen === target;
+      if (on && s.hidden){ s.hidden = false; s.classList.remove('enter'); void s.offsetWidth; s.classList.add('enter'); s.scrollTop = 0; }
+      if (!on) s.hidden = true;
+    });
+    $$('#screenNav button').forEach(b => b.setAttribute('aria-current', b.dataset.go === name));
+    if (name === 'input') openSheet(); else closeSheet();
+    closeDialog();
+    if (target === 'onboarding') renderOb();
+    try { localStorage.setItem('db-demo-screen', name); } catch(e){}
+  }
+  document.addEventListener('click', e => {
+    const g = e.target.closest('[data-go]');
+    if (g){ go(g.dataset.go); return; }
+    const t = e.target.closest('[data-toast]');
+    if (t) toast(t.dataset.toast);
+  });
+
+  /* ---------- ダッシュボード ---------- */
+  function renderDash(animate){
+    const s = spent(), avail = DAILY - s;
+    const [st, label] = statusOf(s, DAILY);
+    const col = `var(--${st})`;
+    const big = $('#bigNum');
+    big.style.setProperty('--hero-c', st === 'warning' || st === 'over' ? col : 'var(--ink)');
+    $('#statusChip').textContent = label;
+    $('#statusChip').style.setProperty('--st', col);
+    $('#meterFill').style.setProperty('--st', col);
+    $('#meterFill').style.width = Math.min(100, s / DAILY * 100) + '%';
+    $('#spentTxt').textContent = yen(s);
+    $('#tomorrowTxt').textContent = yen(Math.max(0, Math.floor((REMAIN_AT_TODAY - s) / (DAYS - TODAY))));
+    $('#monthLeft').textContent = '残り ' + yen(REMAIN_AT_TODAY - s);
+    $('#countTxt').textContent = today.length + '件';
+    countTo(avail, animate);
+    if (animate){ big.classList.remove('pulse'); void big.offsetWidth; big.classList.add('pulse'); }
+
+    $('#ticks').innerHTML = dayBudgets().map(x =>
+      `<i class="${x.d === TODAY ? 'today' : x.amt == null ? '' : x.amt <= x.db ? 'g' : 'r'}" title="9/${x.d}"></i>`).join('');
+
+    $('#todayList').innerHTML = today.length ? today.map(e => `
+      <li class="row${e.fresh ? ' new' : ''}" data-id="${e.id}">
+        ${ico(e.cat)}
+        <div class="meta"><b>${cat(e.cat).name}</b><small>${e.time}${e.memo ? ' · ' + esc(e.memo) : ''}</small></div>
+        <span class="amt">${yen(e.amt)}</span>
+        <button class="del" aria-label="削除"><svg class="i"><use href="#i-trash"/></svg></button>
+      </li>`).join('') : `<li class="empty">今日はまだ記録がありません</li>`;
+    today.forEach(e => delete e.fresh);
+    renderWidgets();
+  }
+  function countTo(to, animate){
+    const el = $('#bigVal'), from = shown ?? to;
+    shown = to;
+    const sign = n => (n < 0 ? '−' : '') + Math.abs(n).toLocaleString('ja-JP');
+    if (!animate || reduce || from === to){ el.textContent = sign(to); return; }
+    const t0 = performance.now(), dur = 520;
+    const step = t => {
+      const p = Math.min(1, (t - t0) / dur), k = 1 - Math.pow(1 - p, 3);
+      el.textContent = sign(Math.round(from + (to - from) * k));
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+  const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  let undo = null;
+  $('#todayList').addEventListener('click', e => {
+    const b = e.target.closest('.del'); if (!b) return;
+    const li = b.closest('.row'), id = +li.dataset.id;
+    const idx = today.findIndex(x => x.id === id), item = today[idx];
+    li.classList.add('out');
+    setTimeout(() => {
+      today.splice(idx, 1); renderDash(true);
+      undo = () => { today.splice(idx, 0, { ...item, fresh:true }); renderDash(true); };
+      toast(`${cat(item.cat).name} ${yen(item.amt)} を削除しました`, true);
+    }, reduce ? 0 : 220);
+  });
+
+  /* ---------- 入力シート ---------- */
+  let amt = '', selCat = 'food';
+  $('#cats').innerHTML = CATS.map(c => `<button class="cat" style="--c:${c.c}" data-cat="${c.id}" aria-pressed="${c.id === selCat}">${ico(c.id)}${c.name}</button>`).join('');
+  $('#keys').innerHTML = ['1','2','3','4','5','6','7','8','9','00','0','del'].map(k =>
+    `<button class="key" data-k="${k}" aria-label="${k === 'del' ? '1文字消す' : k}">${k === 'del' ? '<svg class="i" style="width:24px;height:24px"><use href="#i-back"/></svg>' : k}</button>`).join('');
+  $('#cats').addEventListener('click', e => {
+    const b = e.target.closest('.cat'); if (!b) return;
+    selCat = b.dataset.cat;
+    $$('#cats .cat').forEach(x => x.setAttribute('aria-pressed', x === b));
+  });
+  $('#keys').addEventListener('click', e => {
+    const b = e.target.closest('.key'); if (!b) return;
+    const k = b.dataset.k;
+    if (k === 'del') amt = amt.slice(0, -1);
+    else if (amt.length < 7) amt = (amt + k).replace(/^0+/, '');
+    renderAmt();
+  });
+  function renderAmt(){
+    const n = +amt || 0;
+    $('#amountVal').textContent = n.toLocaleString('ja-JP');
+    $('#amount').classList.toggle('zero', !n);
+    $('#decide').disabled = !n;
+  }
+  function openSheet(){
+    amt = ''; $('#memo').value = ''; renderAmt();
+    $('#sheet').classList.add('open'); $('#backdrop').classList.add('open');
+    $('#sheet').setAttribute('aria-hidden', 'false');
+  }
+  function closeSheet(){
+    $('#sheet').classList.remove('open'); $('#backdrop').classList.remove('open');
+    $('#sheet').setAttribute('aria-hidden', 'true');
+    if ($('#screenNav [aria-current="true"]')?.dataset.go === 'input')
+      $$('#screenNav button').forEach(b => b.setAttribute('aria-current', b.dataset.go === 'dashboard'));
+  }
+  $('#openSheet').addEventListener('click', () => go('input'));
+  $('#closeSheet').addEventListener('click', closeSheet);
+  $('#backdrop').addEventListener('click', () => { closeSheet(); closeDialog(); });
+  $('#decide').addEventListener('click', () => {
+    const n = +amt; if (!n) return;
+    today.unshift({ id:nextId++, cat:selCat, memo:$('#memo').value.trim(), time:'17:15', amt:n, fresh:true });
+    closeSheet();
+    try { navigator.vibrate?.(12); } catch(e){}
+    renderDash(true);
+    undo = null;
+    toast(`${cat(selCat).name} ${yen(n)} を記録しました`);
+  });
+
+  /* ---------- 履歴 ---------- */
+  const WD = ['日','月','火','水','木','金','土'];
+  function renderCal(){
+    const days = dayBudgets(), first = new Date(2026, 8, 1).getDay();
+    let h = WD.map((w,i) => `<div class="wd${i===0?' sun':i===6?' sat':''}">${w}</div>`).join('');
+    for (let i = 0; i < first; i++) h += `<div class="day blank"></div>`;
+    days.forEach(x => {
+      const fut = x.amt == null, cls = fut ? 'future' : x.d === TODAY ? 'today' + (x.amt <= x.db ? ' g' : ' r') : (x.amt <= x.db ? 'g' : 'r');
+      h += `<button class="day ${cls}" data-d="${x.d}" aria-pressed="${x.d === selDay}" ${fut ? 'disabled' : ''} aria-label="9月${x.d}日">
+        <span class="d">${x.d}</span><span class="a">${fut ? '' : x.amt.toLocaleString('ja-JP')}</span><span class="dot"></span></button>`;
+    });
+    $('#cal').innerHTML = h;
+    const tot = PAST.reduce((a,b)=>a+b,0) + spent();
+    $('#sumSpent').textContent = yen(tot);
+    const pace = Math.floor(BUDGET * TODAY / DAYS) - tot;
+    $('#sumPace').textContent = (pace >= 0 ? '+' : '') + yen(pace);
+    $('#sumPace').style.color = pace >= 0 ? 'var(--great)' : 'var(--over)';
+    renderDay(days);
+  }
+  function itemsFor(d, total){
+    if (d === TODAY) return today.map(e => ({ cat:e.cat, memo:e.memo, amt:e.amt }));
+    if (!total) return [];
+    const c1 = CATS[(d * 7) % 5].id, c2 = CATS[(d * 3 + 1) % 6].id;
+    if (total < 1000) return [{ cat:c1, memo:MEMOS[c1][d % MEMOS[c1].length], amt:total }];
+    const a = Math.round(total * .58 / 10) * 10;
+    return [{ cat:c1, memo:MEMOS[c1][d % MEMOS[c1].length], amt:a }, { cat:c2, memo:MEMOS[c2][(d+1) % MEMOS[c2].length], amt:total - a }];
+  }
+  function renderDay(days){
+    const x = days[selDay - 1], wd = WD[new Date(2026, 8, selDay).getDay()];
+    $('#dayTitle').textContent = `9月${selDay}日(${wd})`;
+    $('#dayMeta').textContent = `${yen(x.amt)} / 予算 ${yen(x.db)}`;
+    const items = itemsFor(selDay, x.amt);
+    $('#dayList').innerHTML = items.length ? items.map(e => `
+      <li class="row">${ico(e.cat)}
+        <div class="meta"><b>${cat(e.cat).name}</b><small>${e.memo ? esc(e.memo) : '　'}</small></div>
+        <span class="amt">${yen(e.amt)}</span>
+        <button class="del" data-toast="デモでは編集できません" aria-label="編集"><svg class="i"><use href="#i-pencil"/></svg></button>
+      </li>`).join('') : `<li class="empty">この日は支出なし。予算は翌日以降に回りました。</li>`;
+  }
+  $('#cal').addEventListener('click', e => {
+    const b = e.target.closest('.day:not(.future):not(.blank)'); if (!b) return;
+    selDay = +b.dataset.d;
+    $$('#cal .day').forEach(x => x.setAttribute('aria-pressed', x === b));
+    renderDay(dayBudgets());
+  });
+
+  /* ---------- 設定 ---------- */
+  $('#themeSeg').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('#themeSeg button').forEach(x => x.setAttribute('aria-pressed', x === b));
+    $('#phone').dataset.app = b.dataset.themeSet;
+  });
+  $('#resetBtn').addEventListener('click', () => { $('#dialog').classList.add('open'); $('#backdrop').classList.add('open'); });
+  function closeDialog(){ $('#dialog').classList.remove('open'); if (!$('#sheet').classList.contains('open')) $('#backdrop').classList.remove('open'); }
+  $('#dlgCancel').addEventListener('click', closeDialog);
+  $('#dlgOk').addEventListener('click', () => { obStep = 0; go('onboarding'); });
+
+  /* ---------- ウィジェット ---------- */
+  function renderWidgets(){
+    const s = spent(), [, , short] = statusOf(s, DAILY), avail = DAILY - s;
+    $$('.wdg').forEach(w => {
+      w.dataset.wt = wTheme;
+      w.querySelector('.wval').textContent = (avail < 0 ? '−' : '') + Math.abs(avail).toLocaleString('ja-JP');
+      w.querySelector('.wfill').style.width = Math.min(100, s / DAILY * 100) + '%';
+      w.querySelector('.wchip').textContent = short;
+      const r = w.querySelector('.wrecent');
+      if (r) r.innerHTML = today.slice(0, 2).map(e => `<li><span>${e.memo ? esc(e.memo) : cat(e.cat).name}</span><span class="mono">${yen(e.amt)}</span></li>`).join('') || '<li><span style="opacity:.6">まだありません</span></li>';
+    });
+  }
+  $('#wtSeg').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    wTheme = b.dataset.wtSet;
+    $$('#wtSeg button').forEach(x => x.setAttribute('aria-pressed', x === b));
+    renderWidgets();
+  });
+
+  /* ---------- オンボーディング ---------- */
+  let obStep = 0, obBudget = 50000, obClose = 'end';
+  const CLOSES = [['5','5日'],['10','10日'],['15','15日'],['20','20日'],['25','25日'],['end','月末']];
+  function period(c){
+    if (c === 'end') return { s:'9/1', e:'9/30', n:30 };
+    const d = +c;
+    return TODAY <= d ? { s:`8/${d+1}`, e:`9/${d}`, n:31 } : { s:`9/${d+1}`, e:`10/${d}`, n:30 };
+  }
+  function renderOb(){
+    const dots = `<div class="steps">${[0,1,2].map(i => `<i class="${i === obStep ? 'on' : ''}"></i>`).join('')}</div>`;
+    let body = '';
+    if (obStep === 0){
+      body = `
+        <h2>今日あといくら使えるか、ひと目でわかる。</h2>
+        <div class="ob-demo"><div class="hero-label">今日使えるお金</div><div class="big"><span class="yen">¥</span>2,450</div><span class="chip" style="--st:var(--great)">超順調！</span></div>
+        <ul class="points">
+          <li><span class="cat-ico"><svg class="i"><use href="#i-shield"/></svg></span><div><b>口座連携なし</b><small>記録はこの端末の中だけに保存します</small></div></li>
+          <li><span class="cat-ico"><svg class="i"><use href="#i-tap"/></svg></span><div><b>金額とカテゴリだけで記録</b><small>レシート撮影も細かい分類もいりません</small></div></li>
+          <li><span class="cat-ico"><svg class="i"><use href="#i-roll"/></svg></span><div><b>使わなかった分は明日に回る</b><small>節約した日の翌日は、使える額が増えます</small></div></li>
+        </ul>
+        <div class="ob-actions"><button class="primary" data-ob="next">はじめる</button></div>`;
+    } else if (obStep === 1){
+      body = `
+        <h2>1か月に自由に使えるお金は？</h2>
+        <p class="lead">家賃や光熱費など、毎月決まって出ていくお金を除いた金額です。</p>
+        <label class="budget-field" for="obBudget"><span>¥</span><input id="obBudget" inputmode="numeric" value="${obBudget.toLocaleString('ja-JP')}" aria-label="月の予算"></label>
+        <div class="presets">${[30000,50000,80000,100000].map(v => `<button data-preset="${v}" aria-pressed="${v === obBudget}">${v/10000}万</button>`).join('')}</div>
+        <div class="preview"><div><span>1日あたり</span><b id="obPerDay">約 ${yen(Math.floor(obBudget/30))}</b></div></div>
+        <div class="ob-actions"><button class="primary" data-ob="next" ${obBudget ? '' : 'disabled'}>次へ</button><button class="ghost" data-ob="back">戻る</button></div>`;
+    } else {
+      const p = period(obClose);
+      body = `
+        <h2>毎月何日で区切りますか？</h2>
+        <p class="lead">選んだ日の翌日から、新しい月度が始まります。給料日の前日を選ぶ人が多いです。</p>
+        <div class="days">${CLOSES.map(([v,l]) => `<button data-close="${v}" aria-pressed="${v === obClose}">${l}</button>`).join('')}</div>
+        <div class="preview">
+          <div><span>今の月度</span><b>${p.s}〜${p.e}（${p.n}日間）</b></div>
+          <div><span>月の予算</span><b>${yen(obBudget)}</b></div>
+          <div><span>1日目の予算</span><b>${yen(Math.floor(obBudget / p.n))}</b></div>
+        </div>
+        <div class="ob-actions"><button class="primary" data-ob="done">この設定ではじめる</button><button class="ghost" data-ob="back">戻る</button>
+        <div class="privacy"><svg class="i"><use href="#i-shield"/></svg>入力した内容はこの端末の外に送信されません</div></div>`;
+    }
+    $('#ob').innerHTML = dots + body;
+  }
+  $('#ob').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.ob === 'next'){ obStep++; renderOb(); $('[data-screen="onboarding"]').scrollTop = 0; }
+    else if (b.dataset.ob === 'back'){ obStep--; renderOb(); }
+    else if (b.dataset.ob === 'done'){ obStep = 0; go('dashboard'); toast('設定しました。デモのため表示はサンプルのままです'); }
+    else if (b.dataset.preset){ obBudget = +b.dataset.preset; renderOb(); }
+    else if (b.dataset.close){ obClose = b.dataset.close; renderOb(); }
+  });
+  $('#ob').addEventListener('input', e => {
+    if (e.target.id !== 'obBudget') return;
+    const n = +e.target.value.replace(/\D/g, '').slice(0, 7) || 0;
+    obBudget = n;
+    e.target.value = n ? n.toLocaleString('ja-JP') : '';
+    $('#obPerDay').textContent = '約 ' + yen(Math.floor(n / 30));
+    $$('#ob [data-preset]').forEach(x => x.setAttribute('aria-pressed', +x.dataset.preset === n));
+    $('#ob [data-ob="next"]').disabled = !n;
+  });
+
+  /* ---------- トースト ---------- */
+  let tt;
+  function toast(msg, withUndo){
+    $('#toastMsg').textContent = msg;
+    $('#toastAct').hidden = !withUndo;
+    $('#toast').classList.add('show');
+    clearTimeout(tt); tt = setTimeout(() => $('#toast').classList.remove('show'), 3200);
+  }
+  $('#toastAct').addEventListener('click', () => { undo?.(); undo = null; $('#toast').classList.remove('show'); });
+
+  /* ---------- 起動 ---------- */
+  renderDash(false);
+  renderCal();
+  const _go = go;
+  go = name => { if (name === 'history') renderCal(); _go(name); };
+  let first = 'dashboard';
+  try { first = localStorage.getItem('db-demo-screen') || first; } catch(e){}
+  go(first);
+})();
+</script>
