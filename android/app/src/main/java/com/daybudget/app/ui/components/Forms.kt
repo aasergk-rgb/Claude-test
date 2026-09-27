@@ -132,10 +132,15 @@ fun PresetSheet(onDismiss: () -> Unit, onSave: (label: String, amount: Int, cate
 /** 先の大きな出費を予約する */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlannedSheet(today: LocalDate, onDismiss: () -> Unit, onSave: (label: String, amount: Int, date: LocalDate) -> Unit) {
+fun PlannedSheet(
+    today: LocalDate,
+    initialDate: LocalDate = today.plusDays(1),
+    onDismiss: () -> Unit,
+    onSave: (label: String, amount: Int, date: LocalDate) -> Unit,
+) {
     var label by rememberSaveable { mutableStateOf("") }
     var amount by rememberSaveable { mutableIntStateOf(0) }
-    var date by remember { mutableStateOf(today.plusDays(1)) }
+    var date by remember { mutableStateOf(if (initialDate.isAfter(today)) initialDate else today.plusDays(1)) }
     var picking by remember { mutableStateOf(false) }
     FormSheet("大きな出費を予定に入れる", onDismiss, canSave = label.isNotBlank() && amount > 0, onSave = { onSave(label.trim(), amount, date) }) {
         Text(

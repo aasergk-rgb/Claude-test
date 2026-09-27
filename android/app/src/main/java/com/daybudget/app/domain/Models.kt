@@ -91,3 +91,23 @@ val DEFAULT_PRESETS = listOf(
     Triple("ランチ", 800, "food"),
     Triple("コンビニ", 500, "food"),
 )
+
+/** 初回設定で選べる「よく使う金額」の候補 */
+val PRESET_SUGGESTIONS = DEFAULT_PRESETS + listOf(
+    Triple("飲み物", 130, "cafe"),
+    Triple("お菓子", 200, "cafe"),
+    Triple("電車", 200, "transport"),
+    Triple("日用品", 300, "daily"),
+    Triple("夕飯", 1000, "food"),
+)
+
+const val MAX_PRESETS = 6
+
+/** 初回設定で選んだ内容 */
+data class OnboardingChoices(
+    val monthlyBudget: Int,
+    val closingDay: Int,
+    val presets: List<Triple<String, Int, String>>,
+    val morningNotify: Boolean,
+    val eveningNotify: Boolean,
+)

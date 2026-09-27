@@ -2,6 +2,8 @@ package com.daybudget.app.data
 
 import com.daybudget.app.domain.DEFAULT_PRESETS
 import com.daybudget.app.domain.Expense
+import com.daybudget.app.domain.MAX_PRESETS
+import com.daybudget.app.domain.OnboardingChoices
 import com.daybudget.app.domain.PlannedExpense
 import com.daybudget.app.domain.QuickPreset
 import com.daybudget.app.domain.UserSettings
@@ -88,6 +90,28 @@ class BudgetRepository(
         val base = loadSettings() ?: UserSettings()
         saveSettings(base.copy(monthlyBudget = monthlyBudget, closingDay = closingDay, onboarded = true, startDate = today))
         seedPresetsIfNeeded()
+    }
+
+    /** 初回設定の内容（よく使う金額・通知を含む）を保存する */
+    suspend fun completeOnboarding(choices: OnboardingChoices, today: LocalDate) {
+        dao.deleteAllPresets()
+        choices.presets.take(MAX_PRESETS).forEachIndexed { i, (label, amount, cat) ->
+            dao.insertPreset(PresetEntity(UUID.randomUUID().toString(), label, amount, cat, i))
+        }
+        val base = loadSettings() ?: UserSettings()
+        saveSettings(
+            base.copy(
+                monthlyBudget = choices.monthlyBudget,
+                closingDay = choices.closingDay,
+                onboarded = true,
+                startDate = today,
+                presetsSeeded = true,
+                morningNotify = choices.morningNotify,
+                eveningNotify = choices.eveningNotify,
+                // 初回設定で聞いたので、ホームでは改めて聞かない
+                notifyPromptDismissed = true,
+            ),
+        )
     }
 
     suspend fun updateSettings(transform: (UserSettings) -> UserSettings) {

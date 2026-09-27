@@ -16,7 +16,14 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.daybudget.app.MainActivity
 import com.github.takahirom.roborazzi.captureRoboImage
+import android.Manifest
+import androidx.test.core.app.ApplicationProvider
+import com.daybudget.app.domain.Period
+import com.daybudget.app.domain.longJa
+import org.junit.Before
 import org.junit.Rule
+import org.robolectric.Shadows.shadowOf
+import java.time.LocalDate
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -32,6 +39,11 @@ import org.robolectric.annotation.GraphicsMode
 @Config(qualifiers = "w393dp-h851dp-xxhdpi")
 class AppFlowScreenshotTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
+
+    @Before
+    fun grantNotifications() {
+        shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>()).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+    }
 
     private fun shot(name: String) {
         rule.waitForIdle()
@@ -53,7 +65,17 @@ class AppFlowScreenshotTest {
         shot("02_onboarding_budget")
         rule.onNodeWithText("次へ").performClick()
         shot("03_onboarding_closing")
-        rule.onNodeWithText("この設定ではじめる").performClick()
+        rule.onNodeWithText("次へ").performClick()
+        waitFor("よく使う出費はどれですか？")
+        rule.onNodeWithText("電車").performClick()
+        shot("03b_onboarding_presets")
+        rule.onNodeWithText("次へ").performClick()
+        waitFor("お知らせを受け取りますか？")
+        shot("03c_onboarding_notify")
+        rule.onNodeWithText("次へ").performClick()
+        waitFor("Pro版で、もっと続けやすく。")
+        shot("03d_onboarding_pro")
+        rule.onNodeWithText("まずは無料ではじめる").performClick()
 
         waitFor("今日使えるお金")
         shot("04_dashboard_empty")
@@ -84,6 +106,14 @@ class AppFlowScreenshotTest {
         rule.onNodeWithContentDescription("履歴").performClick()
         waitFor("この日に支出を追加")
         shot("07_history")
+        // 予定を入れた日（明日）をカレンダーで選ぶと、予定が見える
+        val tomorrow = LocalDate.now().plusDays(1)
+        if (Period.of(LocalDate.now(), 31).contains(tomorrow)) {
+            rule.onNodeWithContentDescription(tomorrow.longJa()).performScrollTo().performClick()
+            waitFor("この日に予定を追加")
+            rule.onNodeWithText("飲み会").assertExists()
+            shot("07b_history_planned")
+        }
         rule.onNodeWithContentDescription("戻る").performClick()
 
         rule.onNodeWithContentDescription("設定").performClick()

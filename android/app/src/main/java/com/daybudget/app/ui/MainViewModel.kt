@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.daybudget.app.data.BudgetRepository
 import com.daybudget.app.domain.Expense
+import com.daybudget.app.domain.OnboardingChoices
 import com.daybudget.app.domain.PlannedExpense
 import com.daybudget.app.domain.QuickPreset
 import com.daybudget.app.domain.UserSettings
@@ -51,8 +52,8 @@ class MainViewModel(private val repo: BudgetRepository) : ViewModel() {
         today.value = LocalDate.now()
     }
 
-    fun completeOnboarding(budget: Int, closingDay: Int) = viewModelScope.launch {
-        repo.completeOnboarding(budget, closingDay, today.value)
+    fun completeOnboarding(choices: OnboardingChoices) = viewModelScope.launch {
+        repo.completeOnboarding(choices, today.value)
     }
 
     fun updateSettings(transform: (UserSettings) -> UserSettings) = viewModelScope.launch { repo.updateSettings(transform) }

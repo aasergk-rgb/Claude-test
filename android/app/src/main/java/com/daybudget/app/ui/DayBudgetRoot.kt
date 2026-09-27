@@ -44,6 +44,7 @@ import com.daybudget.app.ui.screens.PaywallScreen
 import com.daybudget.app.ui.screens.RecapScreen
 import com.daybudget.app.ui.screens.SettingsScreen
 import com.daybudget.app.ui.theme.Db
+import com.daybudget.app.ui.theme.AppNightMode
 import com.daybudget.app.ui.theme.DayBudgetTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -84,6 +85,9 @@ fun DayBudgetRoot(viewModel: MainViewModel, requestedRoute: MutableStateFlow<Str
     val messenger = remember { Messenger(snackbar, scope) }
     var sheet by remember { mutableStateOf<SheetTarget?>(null) }
 
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    LaunchedEffect(ready.settings.theme) { AppNightMode.apply(appContext, ready.settings.theme) }
+
     DayBudgetTheme(ready.settings.theme) {
         val dark = Db.colors.isDark
         val activity = LocalActivity.current as? ComponentActivity
@@ -94,7 +98,10 @@ fun DayBudgetRoot(viewModel: MainViewModel, requestedRoute: MutableStateFlow<Str
         CompositionLocalProvider(LocalMessenger provides messenger) {
             Box(Modifier.fillMaxSize().background(Db.colors.appBg)) {
                 if (!ready.settings.onboarded) {
-                    OnboardingScreen(ready.today, onDone = viewModel::completeOnboarding)
+                    OnboardingScreen(ready.today) { choices, openPaywall ->
+                        viewModel.completeOnboarding(choices)
+                        if (openPaywall) requestedRoute.value = Routes.PAYWALL
+                    }
                 } else {
                     val nav = rememberNavController()
                     val route by requestedRoute.collectAsState()
@@ -115,7 +122,7 @@ fun DayBudgetRoot(viewModel: MainViewModel, requestedRoute: MutableStateFlow<Str
                             DashboardScreen(ready, viewModel, openSheet = { sheet = it }, navigate = { nav.navigate(it) })
                         }
                         composable(Routes.HISTORY) {
-                            HistoryScreen(ready, openSheet = { sheet = it }, onBack = { nav.popBackStack() }, openRecap = { nav.navigate(Routes.recap(it)) })
+                            HistoryScreen(ready, viewModel, openSheet = { sheet = it }, onBack = { nav.popBackStack() }, openRecap = { nav.navigate(Routes.recap(it)) })
                         }
                         composable(Routes.SETTINGS) {
                             SettingsScreen(ready, viewModel, onBack = { nav.popBackStack() }, navigate = { nav.navigate(it) })

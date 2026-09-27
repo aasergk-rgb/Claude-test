@@ -53,6 +53,9 @@ import com.daybudget.app.domain.formatYen
 import com.daybudget.app.domain.longJa
 import com.daybudget.app.domain.md
 import com.daybudget.app.ui.AppState
+import com.daybudget.app.ui.LocalMessenger
+import com.daybudget.app.ui.MainViewModel
+import com.daybudget.app.ui.components.PlannedSheet
 import com.daybudget.app.ui.components.DbIconButton
 import com.daybudget.app.ui.components.EmptyBox
 import com.daybudget.app.ui.components.Panel
@@ -67,7 +70,13 @@ import java.time.LocalDate
 private val WEEKDAYS = listOf("日", "月", "火", "水", "木", "金", "土")
 
 @Composable
-fun HistoryScreen(state: AppState.Ready, openSheet: (SheetTarget) -> Unit, onBack: () -> Unit, openRecap: (LocalDate) -> Unit = {}) {
+fun HistoryScreen(
+    state: AppState.Ready,
+    viewModel: MainViewModel,
+    openSheet: (SheetTarget) -> Unit,
+    onBack: () -> Unit,
+    openRecap: (LocalDate) -> Unit = {},
+) {
     val c = Db.colors
     val settings = state.settings
     var anchor by rememberSaveable(state.today) { mutableStateOf(state.today.toString()) }
@@ -81,15 +90,28 @@ fun HistoryScreen(state: AppState.Ready, openSheet: (SheetTarget) -> Unit, onBac
     val third = if (isCurrent) {
         val elapsed = daysBetween(range.from, state.today) + 1
         "ペースより" to ((range.budget.toLong() * elapsed / range.days).toInt() - spent)
+    } else if (period.start.isAfter(state.today)) {
+        "予定の合計" to state.planned.filter { it.date in period }.sumOf { it.amount }
     } else {
         "残った額" to (range.budget - spent)
     }
+    val isFuturePeriod = period.start.isAfter(state.today)
     val sel = LocalDate.parse(selected).let { s ->
-        if (s in period && !s.isAfter(state.today) && !s.isBefore(range.from)) s else if (isCurrent) state.today else period.end
+        when {
+            s in period && !s.isBefore(range.from) -> s
+            isCurrent -> state.today
+            isFuturePeriod -> maxOf(period.start, range.from)
+            else -> period.end
+        }
     }
+    val selIsFuture = sel.isAfter(state.today)
     val dayInfo = days.firstOrNull { it.date == sel }
     val dayItems = remember(state, sel) { state.expenses.filter { it.date == sel }.sortedBy { it.createdAt } }
+    val plannedByDate = remember(state.planned) { state.planned.groupBy { it.date } }
+    val dayPlans = plannedByDate[sel].orEmpty()
     val hasOlder = settings.startDate?.isBefore(period.start) == true
+    val hasLaterPlans = state.planned.any { it.date.isAfter(period.end) }
+    var addingPlan by remember { mutableStateOf(false) }
 
     LazyColumn(
         Modifier.fillMaxSize().statusBarsPadding(),
@@ -104,7 +126,7 @@ fun HistoryScreen(state: AppState.Ready, openSheet: (SheetTarget) -> Unit, onBac
                         Text(period.name, color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                         Text("${period.start.md()}〜${period.end.md()}", color = c.muted, fontSize = 12.sp)
                     }
-                    DbIconButton(DbIcons.Right, "次の月度", onClick = { anchor = period.end.plusDays(1).toString() }, enabled = !isCurrent)
+                    DbIconButton(DbIcons.Right, "次の月度", onClick = { anchor = period.end.plusDays(1).toString() }, enabled = !isCurrent && !isFuturePeriod || hasLaterPlans)
                 }
             }
         }
@@ -119,7 +141,7 @@ fun HistoryScreen(state: AppState.Ready, openSheet: (SheetTarget) -> Unit, onBac
                 }
             }
         }
-        if (!isCurrent) item {
+        if (period.end.isBefore(state.today)) item {
             Row(
                 Modifier.padding(bottom = 16.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.ink)
                     .clickable(role = Role.Button) { openRecap(period.end) }.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -151,7 +173,11 @@ fun HistoryScreen(state: AppState.Ready, openSheet: (SheetTarget) -> Unit, onBac
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         week.forEach { d ->
                             Box(Modifier.weight(1f)) {
-                                if (d != null) DayCell(d, isFirst = d.date == period.start, today = state.today, selected = d.date == sel) { selected = d.date.toString() }
+                                if (d != null) {
+                                    DayCell(d, isFirst = d.date == period.start, today = state.today, selected = d.date == sel, planned = plannedByDate[d.date].orEmpty().sumOf { it.amount }) {
+                                        selected = d.date.toString()
+                                    }
+                                }
                             }
                         }
                         repeat(7 - week.size) { Spacer(Modifier.weight(1f)) }
@@ -163,15 +189,35 @@ fun HistoryScreen(state: AppState.Ready, openSheet: (SheetTarget) -> Unit, onBac
             Row(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.End)) {
                 Legend(c.great, "予算内")
                 Legend(c.over, "超過")
+                Legend(c.accent, "予定")
             }
         }
         item {
             Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.Bottom) {
                 Text(sel.longJa(), color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                if (dayInfo != null) Text("${formatYen(dayInfo.spent)} / 予算 ${formatYen(dayInfo.budget)}", color = c.muted, fontSize = 12.sp)
+                if (selIsFuture) {
+                    if (dayPlans.isNotEmpty()) Text("予定 ${formatYen(dayPlans.sumOf { it.amount })}", color = c.muted, fontSize = 12.sp)
+                } else if (dayInfo != null) {
+                    Text("${formatYen(dayInfo.spent)} / 予算 ${formatYen(dayInfo.budget)}", color = c.muted, fontSize = 12.sp)
+                }
             }
         }
-        if (dayItems.isEmpty()) item { EmptyBox("この日の支出はありません") }
+        items(dayPlans, key = { "plan-" + it.id }) { p ->
+            Row(
+                Modifier.padding(bottom = 8.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.accent.copy(alpha = 0.14f))
+                    .border(1.dp, c.accent.copy(alpha = 0.6f), RoundedCornerShape(16.dp)).padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("予定", Modifier.clip(RoundedCornerShape(6.dp)).background(c.accent).padding(horizontal = 6.dp, vertical = 2.dp), color = c.accentInk, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(10.dp))
+                Text(p.label, color = c.ink, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1)
+                Text(formatYen(p.amount), color = c.ink, fontSize = 15.sp, style = MonoStyle)
+                DbIconButton(DbIcons.Close, "予定を削除", onClick = { viewModel.deletePlanned(p.id) }, tint = c.muted, modifier = Modifier.size(40.dp))
+            }
+        }
+        if (selIsFuture) {
+            if (dayPlans.isEmpty()) item { EmptyBox("この日の予定はありません") }
+        } else if (dayItems.isEmpty()) item { EmptyBox("この日の支出はありません") }
         items(dayItems, key = { it.id }) { e ->
             ExpenseItem(
                 e,
@@ -186,15 +232,24 @@ fun HistoryScreen(state: AppState.Ready, openSheet: (SheetTarget) -> Unit, onBac
         item {
             Row(
                 Modifier.padding(top = 4.dp).fillMaxWidth().height(48.dp).clip(RoundedCornerShape(14.dp))
-                    .border(1.5.dp, c.line, RoundedCornerShape(14.dp)).clickable(role = Role.Button) { openSheet(SheetTarget.Add(sel)) },
+                    .border(1.5.dp, c.line, RoundedCornerShape(14.dp))
+                    .clickable(role = Role.Button) { if (selIsFuture) addingPlan = true else openSheet(SheetTarget.Add(sel)) },
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(DbIcons.Plus, null, tint = c.muted, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("この日に支出を追加", color = c.muted, fontWeight = FontWeight.Bold)
+                Text(if (selIsFuture) "この日に予定を追加" else "この日に支出を追加", color = c.muted, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.navigationBarsPadding())
+        }
+    }
+
+    if (addingPlan) {
+        val messenger = LocalMessenger.current
+        PlannedSheet(state.today, initialDate = sel, onDismiss = { addingPlan = false }) { label, amount, date ->
+            viewModel.addPlanned(label, amount, date)
+            messenger.show("${date.md()}の「$label」を予定に入れました")
         }
     }
 }
@@ -218,11 +273,12 @@ private fun Legend(color: Color, label: String) {
 }
 
 @Composable
-private fun DayCell(d: DaySummary, isFirst: Boolean, today: LocalDate, selected: Boolean, onClick: () -> Unit) {
+private fun DayCell(d: DaySummary, isFirst: Boolean, today: LocalDate, selected: Boolean, planned: Int, onClick: () -> Unit) {
     val c = Db.colors
     val future = d.state == DayState.FUTURE
     val off = d.state == DayState.INACTIVE
-    val enabled = !future && !off
+    // 先の日も、予定を見たり追加したりするために選べる
+    val enabled = !off
     val bg = when {
         selected -> c.ink
         future || off -> Color.Transparent
@@ -238,7 +294,7 @@ private fun DayCell(d: DaySummary, isFirst: Boolean, today: LocalDate, selected:
     Column(
         Modifier
             .aspectRatio(1f / 1.12f)
-            .alpha(if (future) 0.55f else if (off) 0.4f else 1f)
+            .alpha(if (future && planned == 0) 0.55f else if (off) 0.4f else 1f)
             .clip(RoundedCornerShape(10.dp))
             .background(bg)
             .border(if (d.date == today) 2.dp else 1.dp, border, RoundedCornerShape(10.dp))
@@ -249,13 +305,27 @@ private fun DayCell(d: DaySummary, isFirst: Boolean, today: LocalDate, selected:
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(label, color = if (selected) c.appBg else c.ink, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-        Text(if (enabled) formatNumber(d.spent) else "", color = if (selected) c.appBg else c.muted, fontSize = 9.5.sp, fontFamily = MonoFamily, maxLines = 1, letterSpacing = (-0.3).sp)
+        val amountText = when {
+            off -> ""
+            future -> if (planned > 0) formatNumber(planned) else ""
+            else -> formatNumber(d.spent)
+        }
+        val amountColor = when {
+            selected -> c.appBg
+            future && planned > 0 -> if (c.isDark) c.accent else c.warning
+            else -> c.muted
+        }
+        Text(amountText, color = amountColor, fontSize = 9.5.sp, fontFamily = MonoFamily, maxLines = 1, letterSpacing = (-0.3).sp)
         val dot = when (d.state) {
             DayState.UNDER -> c.great
             DayState.OVER -> c.over
             DayState.TODAY -> if (d.spent <= d.budget) c.great else c.over
             else -> Color.Transparent
         }
-        Box(Modifier.size(6.dp).clip(CircleShape).background(dot))
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            if (dot != Color.Transparent) Box(Modifier.size(6.dp).clip(CircleShape).background(dot))
+            if (planned > 0) Box(Modifier.size(6.dp).clip(CircleShape).background(c.accent))
+            if (dot == Color.Transparent && planned == 0) Box(Modifier.size(6.dp))
+        }
     }
 }
