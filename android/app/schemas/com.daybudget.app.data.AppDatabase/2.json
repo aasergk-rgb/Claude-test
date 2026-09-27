@@ -1,0 +1,303 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "5c6b9b296a15bb2169053706f8858f14",
+    "entities": [
+      {
+        "tableName": "user_settings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `monthly_budget` INTEGER NOT NULL, `closing_day` INTEGER NOT NULL DEFAULT 31, `carryover_mode` TEXT NOT NULL DEFAULT 'distribute', `theme` TEXT NOT NULL DEFAULT 'system', `widget_theme` TEXT NOT NULL DEFAULT 'dark', `is_pro` INTEGER NOT NULL DEFAULT 0, `onboarded` INTEGER NOT NULL DEFAULT 0, `last_category_id` TEXT NOT NULL DEFAULT 'food', `start_date` TEXT, `created_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, `morning_notify` INTEGER NOT NULL DEFAULT 0, `morning_time` INTEGER NOT NULL DEFAULT 480, `evening_notify` INTEGER NOT NULL DEFAULT 0, `evening_time` INTEGER NOT NULL DEFAULT 1260, `notify_prompt_dismissed` INTEGER NOT NULL DEFAULT 0, `last_recap_end` TEXT, `presets_seeded` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "monthlyBudget",
+            "columnName": "monthly_budget",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "closingDay",
+            "columnName": "closing_day",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "31"
+          },
+          {
+            "fieldPath": "carryoverMode",
+            "columnName": "carryover_mode",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'distribute'"
+          },
+          {
+            "fieldPath": "theme",
+            "columnName": "theme",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'system'"
+          },
+          {
+            "fieldPath": "widgetTheme",
+            "columnName": "widget_theme",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'dark'"
+          },
+          {
+            "fieldPath": "isPro",
+            "columnName": "is_pro",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "onboarded",
+            "columnName": "onboarded",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "lastCategoryId",
+            "columnName": "last_category_id",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'food'"
+          },
+          {
+            "fieldPath": "startDate",
+            "columnName": "start_date",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "morningNotify",
+            "columnName": "morning_notify",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "morningTime",
+            "columnName": "morning_time",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "480"
+          },
+          {
+            "fieldPath": "eveningNotify",
+            "columnName": "evening_notify",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "eveningTime",
+            "columnName": "evening_time",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1260"
+          },
+          {
+            "fieldPath": "notifyPromptDismissed",
+            "columnName": "notify_prompt_dismissed",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "lastRecapEnd",
+            "columnName": "last_recap_end",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "presetsSeeded",
+            "columnName": "presets_seeded",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "expenses",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `amount` INTEGER NOT NULL, `category_id` TEXT NOT NULL, `memo` TEXT, `date` TEXT NOT NULL, `created_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amount",
+            "columnName": "amount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "categoryId",
+            "columnName": "category_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "memo",
+            "columnName": "memo",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "date",
+            "columnName": "date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "idx_expenses_date",
+            "unique": false,
+            "columnNames": [
+              "date"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `idx_expenses_date` ON `${TABLE_NAME}` (`date`)"
+          }
+        ]
+      },
+      {
+        "tableName": "quick_presets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `label` TEXT NOT NULL, `amount` INTEGER NOT NULL, `category_id` TEXT NOT NULL, `order_num` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "label",
+            "columnName": "label",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amount",
+            "columnName": "amount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "categoryId",
+            "columnName": "category_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "order",
+            "columnName": "order_num",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "planned_expenses",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `label` TEXT NOT NULL, `amount` INTEGER NOT NULL, `date` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "label",
+            "columnName": "label",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amount",
+            "columnName": "amount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "date",
+            "columnName": "date",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "idx_planned_date",
+            "unique": false,
+            "columnNames": [
+              "date"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `idx_planned_date` ON `${TABLE_NAME}` (`date`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '5c6b9b296a15bb2169053706f8858f14')"
+    ]
+  }
+}

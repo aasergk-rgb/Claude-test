@@ -40,9 +40,51 @@ interface BudgetDao {
     @Query("DELETE FROM user_settings")
     suspend fun deleteSettings()
 
+    @Query("SELECT * FROM quick_presets ORDER BY order_num")
+    fun observePresets(): Flow<List<PresetEntity>>
+
+    @Query("SELECT * FROM quick_presets ORDER BY order_num")
+    suspend fun getPresets(): List<PresetEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPreset(preset: PresetEntity)
+
+    @Query("DELETE FROM quick_presets WHERE id = :id")
+    suspend fun deletePreset(id: String)
+
+    @Query("DELETE FROM quick_presets")
+    suspend fun deleteAllPresets()
+
+    @Query("SELECT * FROM planned_expenses ORDER BY date")
+    fun observePlanned(): Flow<List<PlannedEntity>>
+
+    @Query("SELECT * FROM planned_expenses ORDER BY date")
+    suspend fun getPlanned(): List<PlannedEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPlanned(planned: PlannedEntity)
+
+    @Query("DELETE FROM planned_expenses WHERE id = :id")
+    suspend fun deletePlanned(id: String)
+
+    @Query("DELETE FROM planned_expenses")
+    suspend fun deleteAllPlanned()
+
     @Transaction
     suspend fun resetAll() {
         deleteAllExpenses()
+        deleteAllPresets()
+        deleteAllPlanned()
         deleteSettings()
+    }
+
+    /** バックアップから丸ごと置き換える */
+    @Transaction
+    suspend fun replaceAll(settings: SettingsEntity, expenses: List<ExpenseEntity>, presets: List<PresetEntity>, planned: List<PlannedEntity>) {
+        resetAll()
+        upsertSettings(settings)
+        expenses.forEach { insertExpense(it) }
+        presets.forEach { insertPreset(it) }
+        planned.forEach { insertPlanned(it) }
     }
 }

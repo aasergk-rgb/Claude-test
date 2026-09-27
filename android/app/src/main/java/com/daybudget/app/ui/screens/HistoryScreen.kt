@@ -67,7 +67,7 @@ import java.time.LocalDate
 private val WEEKDAYS = listOf("日", "月", "火", "水", "木", "金", "土")
 
 @Composable
-fun HistoryScreen(state: AppState.Ready, openSheet: (SheetTarget) -> Unit, onBack: () -> Unit) {
+fun HistoryScreen(state: AppState.Ready, openSheet: (SheetTarget) -> Unit, onBack: () -> Unit, openRecap: (LocalDate) -> Unit = {}) {
     val c = Db.colors
     val settings = state.settings
     var anchor by rememberSaveable(state.today) { mutableStateOf(state.today.toString()) }
@@ -76,7 +76,7 @@ fun HistoryScreen(state: AppState.Ready, openSheet: (SheetTarget) -> Unit, onBac
     val period = remember(anchor, settings.closingDay) { Period.of(LocalDate.parse(anchor), settings.closingDay) }
     val isCurrent = state.today in period
     val range = BudgetCalculator.activeRange(period, settings.monthlyBudget, settings.startDate)
-    val days = remember(period, state) { BudgetCalculator.simulatePeriod(period, settings, state.expenses, state.today) }
+    val days = remember(period, state) { BudgetCalculator.simulatePeriod(period, settings, state.expenses, state.today, state.planned) }
     val spent = days.sumOf { it.spent }
     val third = if (isCurrent) {
         val elapsed = daysBetween(range.from, state.today) + 1
@@ -117,6 +117,16 @@ fun HistoryScreen(state: AppState.Ready, openSheet: (SheetTarget) -> Unit, onBac
                     Box(Modifier.width(1.dp).height(62.dp).background(c.line))
                     Stat(third.first, formatSignedYen(third.second), if (third.second >= 0) c.great else c.over, Modifier.weight(1f))
                 }
+            }
+        }
+        if (!isCurrent) item {
+            Row(
+                Modifier.padding(bottom = 16.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.ink)
+                    .clickable(role = Role.Button) { openRecap(period.end) }.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("${period.name}の振り返りカードを見る", color = c.appBg, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                Icon(DbIcons.Right, null, tint = c.appBg, modifier = Modifier.size(18.dp))
             }
         }
         item {

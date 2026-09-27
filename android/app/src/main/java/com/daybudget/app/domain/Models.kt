@@ -35,7 +35,7 @@ enum class AppTheme(val key: String) {
 }
 
 enum class WidgetTheme(val key: String, val label: String) {
-    DARK("dark", "ダーク"), WHITE("white", "ホワイト"), NEON("neon", "ネオン");
+    DARK("dark", "ダーク"), WHITE("white", "ホワイト"), NEON("neon", "ネオン"), SAKURA("sakura", "サクラ"), MINT("mint", "ミント");
 
     companion object {
         fun fromKey(key: String) = entries.firstOrNull { it.key == key } ?: DARK
@@ -54,4 +54,40 @@ data class UserSettings(
     val lastCategoryId: String = Categories.FOOD.id,
     /** 使い始めた日。最初の月度の予算按分に使う */
     val startDate: LocalDate? = null,
+    /** 朝のお知らせ（今日使える額） */
+    val morningNotify: Boolean = false,
+    /** 0時からの分 */
+    val morningTime: Int = 8 * 60,
+    /** 夜のリマインド */
+    val eveningNotify: Boolean = false,
+    val eveningTime: Int = 21 * 60,
+    /** ダッシュボードの「通知をオンにしますか？」を閉じたか */
+    val notifyPromptDismissed: Boolean = false,
+    /** 最後に振り返りカードを見せた月度の終了日 */
+    val lastRecapEnd: LocalDate? = null,
+    /** よく使う金額の初期値を入れたか（全部消した人に再度入れないため） */
+    val presetsSeeded: Boolean = false,
+)
+
+/** よく使う金額（ウィジェットとアプリから1タップで記録） */
+data class QuickPreset(
+    val id: String,
+    val label: String,
+    val amount: Int,
+    val categoryId: String,
+    val order: Int,
+)
+
+/** 先の日付に予約しておく大きな出費（飲み会など） */
+data class PlannedExpense(
+    val id: String,
+    val label: String,
+    val amount: Int,
+    val date: LocalDate,
+)
+
+val DEFAULT_PRESETS = listOf(
+    Triple("コーヒー", 150, "cafe"),
+    Triple("ランチ", 800, "food"),
+    Triple("コンビニ", 500, "food"),
 )

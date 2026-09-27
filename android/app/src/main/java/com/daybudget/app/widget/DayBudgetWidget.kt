@@ -13,7 +13,9 @@ import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.LocalSize
 import androidx.glance.action.Action
+import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
+import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.LinearProgressIndicator
 import androidx.glance.appwidget.SizeMode
@@ -43,6 +45,8 @@ import com.daybudget.app.domain.BudgetCalculator
 import com.daybudget.app.domain.Categories
 import com.daybudget.app.domain.CarryoverMode
 import com.daybudget.app.domain.Expense
+import com.daybudget.app.domain.PlannedExpense
+import com.daybudget.app.domain.QuickPreset
 import com.daybudget.app.domain.Status
 import com.daybudget.app.domain.UserSettings
 import com.daybudget.app.domain.WidgetTheme
@@ -67,11 +71,20 @@ data class WidgetData(
     val recent: List<Expense>,
     val paceLabel: String,
     val paceValue: Int,
+    /** 1タップで記録するボタン（最大3つ） */
+    val presets: List<QuickPreset> = emptyList(),
+    val streak: Int = 0,
 ) {
     companion object {
-        fun from(settings: UserSettings?, expenses: List<Expense>, today: LocalDate): WidgetData {
+        fun from(
+            settings: UserSettings?,
+            expenses: List<Expense>,
+            today: LocalDate,
+            presets: List<QuickPreset> = emptyList(),
+            planned: List<PlannedExpense> = emptyList(),
+        ): WidgetData {
             val s = settings ?: UserSettings()
-            val snap = BudgetCalculator.computeToday(s, expenses, today)
+            val snap = BudgetCalculator.computeToday(s, expenses, today, planned)
             val savings = s.carryoverMode == CarryoverMode.SAVINGS
             return WidgetData(
                 onboarded = s.onboarded,
@@ -86,6 +99,8 @@ data class WidgetData(
                 recent = expenses.filter { it.date == today }.sortedByDescending { it.createdAt }.take(2),
                 paceLabel = if (savings) "今月の貯金" else "今月の節約ペース",
                 paceValue = if (savings) snap.savingsAmount else snap.pace,
+                presets = presets.sortedBy { it.order }.take(3),
+                streak = BudgetCalculator.underBudgetStreak(s, expenses, today, planned),
             )
         }
     }
@@ -95,16 +110,19 @@ class DayBudgetWidget : GlanceAppWidget() {
     companion object {
         val SMALL = DpSize(110.dp, 110.dp)
         val MEDIUM = DpSize(250.dp, 110.dp)
+        val LARGE = DpSize(250.dp, 230.dp)
     }
 
-    override val sizeMode = SizeMode.Responsive(setOf(SMALL, MEDIUM))
+    override val sizeMode = SizeMode.Responsive(setOf(SMALL, MEDIUM, LARGE))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repo = (context.applicationContext as DayBudgetApp).repository
-        val initial = WidgetData.from(repo.loadSettings(), repo.loadExpenses(), LocalDate.now())
+        val initial = WidgetData.from(repo.loadSettings(), repo.loadExpenses(), LocalDate.now(), repo.loadPresets(), repo.loadPlanned())
         // ウィジェットの表示中はデータベースの変化を直接受け取って描き直す。
         // （最初に1回読むだけだと、表示中の更新で古い値が出たままになる）
-        val updates = combine(repo.settings, repo.expenses) { s, e -> WidgetData.from(s, e, LocalDate.now()) }
+        val updates = combine(repo.settings, repo.expenses, repo.presets, repo.planned) { s, e, p, pl ->
+            WidgetData.from(s, e, LocalDate.now(), p, pl)
+        }
         provideContent {
             val data by updates.collectAsState(initial)
             WidgetContent(context, data)
@@ -124,7 +142,9 @@ private fun openApp(context: Context, route: String? = null): Action = actionSta
 @Composable
 private fun WidgetContent(context: Context, d: WidgetData) {
     val wc = WidgetColors.of(d.theme)
-    val medium = LocalSize.current.width >= DayBudgetWidget.MEDIUM.width
+    val size = LocalSize.current
+    val wide = size.width >= DayBudgetWidget.MEDIUM.width
+    val tall = size.height >= DayBudgetWidget.LARGE.height
     Box(
         GlanceModifier.fillMaxSize().appWidgetBackground().cornerRadius(22.dp).background(Color(wc.background)).padding(14.dp)
             .clickable(openApp(context)),
@@ -137,25 +157,51 @@ private fun WidgetContent(context: Context, d: WidgetData) {
             }
             return@Box
         }
-        Row(GlanceModifier.fillMaxSize()) {
-            Summary(d, wc, GlanceModifier.defaultWeight().fillMaxHeight())
-            if (medium) {
-                Spacer(GlanceModifier.width(14.dp))
-                Box(GlanceModifier.width(1.dp).fillMaxHeight().background(Color(wc.divider))) {}
-                Spacer(GlanceModifier.width(14.dp))
-                if (d.isPro) Details(d, wc, GlanceModifier.defaultWeight().fillMaxHeight())
-                else Locked(context, wc, GlanceModifier.defaultWeight().fillMaxHeight())
+        when {
+            // 大: 残額と詳細（Pro）、下に1タップ記録
+            wide && tall -> Column(GlanceModifier.fillMaxSize()) {
+                Row(GlanceModifier.fillMaxWidth().defaultWeight()) {
+                    Summary(context, d, wc, GlanceModifier.defaultWeight().fillMaxHeight(), showAdd = false)
+                    Divider(wc)
+                    if (d.isPro) Details(d, wc, GlanceModifier.defaultWeight().fillMaxHeight())
+                    else Locked(context, wc, GlanceModifier.defaultWeight().fillMaxHeight())
+                }
+                Spacer(GlanceModifier.height(12.dp))
+                QuickRow(context, d, wc)
             }
+            // 中: 残額と1タップ記録（無料）
+            wide -> Row(GlanceModifier.fillMaxSize()) {
+                Summary(context, d, wc, GlanceModifier.defaultWeight().fillMaxHeight(), showAdd = false)
+                Divider(wc)
+                QuickColumn(context, d, wc, GlanceModifier.defaultWeight().fillMaxHeight())
+            }
+            // 小: 残額と「＋」
+            else -> Summary(context, d, wc, GlanceModifier.fillMaxSize(), showAdd = true)
         }
     }
 }
 
 @Composable
-private fun Summary(d: WidgetData, wc: WidgetColors, modifier: GlanceModifier) {
+private fun Divider(wc: WidgetColors) {
+    Spacer(GlanceModifier.width(12.dp))
+    Box(GlanceModifier.width(1.dp).fillMaxHeight().background(Color(wc.divider))) {}
+    Spacer(GlanceModifier.width(12.dp))
+}
+
+@Composable
+private fun Summary(context: Context, d: WidgetData, wc: WidgetColors, modifier: GlanceModifier, showAdd: Boolean) {
     val statusColor = wc.status(d.status)
     val number = if (d.status == Status.OVER) statusColor else wc.number
     Column(modifier) {
-        Text("今日使えるお金", style = TextStyle(color = color(wc.sub), fontSize = 11.sp, fontWeight = FontWeight.Bold))
+        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("今日使えるお金", GlanceModifier.defaultWeight(), style = TextStyle(color = color(wc.sub), fontSize = 11.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+            if (showAdd) {
+                Box(
+                    GlanceModifier.width(26.dp).height(26.dp).cornerRadius(13.dp).background(Color(0xFFFFC53D)).clickable(openApp(context, Routes.ADD)),
+                    contentAlignment = Alignment.Center,
+                ) { Text("+", style = TextStyle(color = color(0xFF241A02), fontSize = 16.sp, fontWeight = FontWeight.Bold)) }
+            }
+        }
         Spacer(GlanceModifier.defaultWeight())
         Text(
             (if (d.todayAvailable < 0) "−¥" else "¥") + formatNumber(kotlin.math.abs(d.todayAvailable)),
@@ -168,8 +214,54 @@ private fun Summary(d: WidgetData, wc: WidgetColors, modifier: GlanceModifier) {
         Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(d.status.short, style = TextStyle(color = color(statusColor), fontSize = 10.sp, fontWeight = FontWeight.Bold))
             Spacer(GlanceModifier.defaultWeight())
-            Text(d.today.md(), style = TextStyle(color = color(wc.sub), fontSize = 10.sp))
+            Text(if (d.streak >= 2) "${d.streak}日連続" else d.today.md(), style = TextStyle(color = color(wc.sub), fontSize = 10.sp))
         }
+    }
+}
+
+@Composable
+private fun QuickButton(context: Context, p: QuickPreset, wc: WidgetColors, modifier: GlanceModifier) {
+    Box(
+        modifier.height(34.dp).cornerRadius(12.dp).background(Color(wc.track))
+            .clickable(actionRunCallback<QuickAddAction>(actionParametersOf(QuickAddAction.PRESET_ID to p.id))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            "${p.label} ${formatYen(p.amount)}",
+            GlanceModifier.padding(horizontal = 8.dp),
+            style = TextStyle(color = color(wc.text), fontSize = 11.sp, fontWeight = FontWeight.Bold),
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun QuickColumn(context: Context, d: WidgetData, wc: WidgetColors, modifier: GlanceModifier) {
+    Column(modifier) {
+        Text("タップで記録", style = TextStyle(color = color(wc.sub), fontSize = 11.sp, fontWeight = FontWeight.Bold))
+        Spacer(GlanceModifier.height(6.dp))
+        if (d.presets.isEmpty()) {
+            Text("アプリの設定で「よく使う金額」を追加できます", style = TextStyle(color = color(wc.sub), fontSize = 11.sp))
+        }
+        d.presets.forEachIndexed { i, p ->
+            if (i > 0) Spacer(GlanceModifier.height(5.dp))
+            QuickButton(context, p, wc, GlanceModifier.fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+private fun QuickRow(context: Context, d: WidgetData, wc: WidgetColors) {
+    Row(GlanceModifier.fillMaxWidth()) {
+        d.presets.forEachIndexed { i, p ->
+            if (i > 0) Spacer(GlanceModifier.width(6.dp))
+            QuickButton(context, p, wc, GlanceModifier.defaultWeight())
+        }
+        if (d.presets.isNotEmpty()) Spacer(GlanceModifier.width(6.dp))
+        Box(
+            GlanceModifier.width(40.dp).height(34.dp).cornerRadius(12.dp).background(Color(0xFFFFC53D)).clickable(openApp(context, Routes.ADD)),
+            contentAlignment = Alignment.Center,
+        ) { Text("+", style = TextStyle(color = color(0xFF241A02), fontSize = 16.sp, fontWeight = FontWeight.Bold)) }
     }
 }
 

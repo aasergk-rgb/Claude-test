@@ -41,6 +41,7 @@ import com.daybudget.app.ui.screens.DashboardScreen
 import com.daybudget.app.ui.screens.HistoryScreen
 import com.daybudget.app.ui.screens.OnboardingScreen
 import com.daybudget.app.ui.screens.PaywallScreen
+import com.daybudget.app.ui.screens.RecapScreen
 import com.daybudget.app.ui.screens.SettingsScreen
 import com.daybudget.app.ui.theme.Db
 import com.daybudget.app.ui.theme.DayBudgetTheme
@@ -53,6 +54,12 @@ object Routes {
     const val HISTORY = "history"
     const val SETTINGS = "settings"
     const val PAYWALL = "paywall"
+    const val RECAP = "recap/{end}"
+
+    /** ウィジェット・通知から「支出を記録」を開くときの行き先 */
+    const val ADD = "add"
+
+    fun recap(end: java.time.LocalDate) = "recap/$end"
 }
 
 /** 画面下のお知らせ（「元に戻す」付きにもできる） */
@@ -93,7 +100,8 @@ fun DayBudgetRoot(viewModel: MainViewModel, requestedRoute: MutableStateFlow<Str
                     val route by requestedRoute.collectAsState()
                     LaunchedEffect(route) {
                         route?.let {
-                            nav.navigate(it) { launchSingleTop = true }
+                            if (it == Routes.ADD) sheet = SheetTarget.Add(ready.today)
+                            else nav.navigate(it) { launchSingleTop = true }
                             requestedRoute.value = null
                         }
                     }
@@ -107,13 +115,17 @@ fun DayBudgetRoot(viewModel: MainViewModel, requestedRoute: MutableStateFlow<Str
                             DashboardScreen(ready, viewModel, openSheet = { sheet = it }, navigate = { nav.navigate(it) })
                         }
                         composable(Routes.HISTORY) {
-                            HistoryScreen(ready, openSheet = { sheet = it }, onBack = { nav.popBackStack() })
+                            HistoryScreen(ready, openSheet = { sheet = it }, onBack = { nav.popBackStack() }, openRecap = { nav.navigate(Routes.recap(it)) })
                         }
                         composable(Routes.SETTINGS) {
                             SettingsScreen(ready, viewModel, onBack = { nav.popBackStack() }, navigate = { nav.navigate(it) })
                         }
                         composable(Routes.PAYWALL) {
                             PaywallScreen(onClose = { nav.popBackStack() })
+                        }
+                        composable(Routes.RECAP) { entry ->
+                            val end = entry.arguments?.getString("end")?.let(java.time.LocalDate::parse) ?: ready.today
+                            RecapScreen(ready, end, onClose = { nav.popBackStack() }, navigate = { nav.navigate(it) })
                         }
                     }
                 }

@@ -39,8 +39,10 @@ import com.daybudget.app.ui.theme.Db
 
 private val ROWS = listOf(
     Triple("日割り計算・支出の記録", true, true),
-    Triple("ウィジェット（小・ダーク）", true, true),
-    Triple("ウィジェット全サイズ・着せ替え", false, true),
+    Triple("ウィジェットから1タップで記録", true, true),
+    Triple("朝・夜のお知らせ、振り返りカード", true, true),
+    Triple("ウィジェット大サイズ・着せ替え5種", false, true),
+    Triple("振り返りカードのデザイン追加", false, true),
     Triple("貯金プールモード", false, true),
     Triple("CSVで書き出し", false, true),
 )

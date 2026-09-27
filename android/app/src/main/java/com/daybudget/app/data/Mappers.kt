@@ -3,6 +3,8 @@ package com.daybudget.app.data
 import com.daybudget.app.domain.AppTheme
 import com.daybudget.app.domain.CarryoverMode
 import com.daybudget.app.domain.Expense
+import com.daybudget.app.domain.PlannedExpense
+import com.daybudget.app.domain.QuickPreset
 import com.daybudget.app.domain.UserSettings
 import com.daybudget.app.domain.WidgetTheme
 import java.time.Instant
@@ -18,6 +20,13 @@ fun SettingsEntity.toDomain() = UserSettings(
     onboarded = onboarded,
     lastCategoryId = lastCategoryId,
     startDate = startDate?.let(LocalDate::parse),
+    morningNotify = morningNotify,
+    morningTime = morningTime,
+    eveningNotify = eveningNotify,
+    eveningTime = eveningTime,
+    notifyPromptDismissed = notifyPromptDismissed,
+    lastRecapEnd = lastRecapEnd?.let(LocalDate::parse),
+    presetsSeeded = presetsSeeded,
 )
 
 fun UserSettings.toEntity(createdAt: String, updatedAt: String) = SettingsEntity(
@@ -32,7 +41,22 @@ fun UserSettings.toEntity(createdAt: String, updatedAt: String) = SettingsEntity
     startDate = startDate?.toString(),
     createdAt = createdAt,
     updatedAt = updatedAt,
+    morningNotify = morningNotify,
+    morningTime = morningTime,
+    eveningNotify = eveningNotify,
+    eveningTime = eveningTime,
+    notifyPromptDismissed = notifyPromptDismissed,
+    lastRecapEnd = lastRecapEnd?.toString(),
+    presetsSeeded = presetsSeeded,
 )
+
+fun PresetEntity.toDomain() = QuickPreset(id, label, amount, categoryId, order)
+
+fun QuickPreset.toEntity() = PresetEntity(id, label, amount, categoryId, order)
+
+fun PlannedEntity.toDomain() = PlannedExpense(id, label, amount, LocalDate.parse(date))
+
+fun PlannedExpense.toEntity() = PlannedEntity(id, label, amount, date.toString())
 
 fun ExpenseEntity.toDomain() = Expense(
     id = id,

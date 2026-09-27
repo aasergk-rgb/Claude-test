@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- シェア用の振り返りカード画像だけを一時的に共有する -->
+<paths>
+    <cache-path name="shared" path="shared/" />
+</paths>

@@ -22,7 +22,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import android.Manifest
+import android.os.Build
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
+import com.daybudget.app.domain.Categories
+import com.daybudget.app.notify.DailyNotifications
+import com.daybudget.app.ui.components.CategoryIcon
+import com.daybudget.app.ui.components.PresetSheet
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -86,6 +96,10 @@ private val MODE_HELP = mapOf(
 
 private enum class Editor { BUDGET, CLOSING }
 
+private fun timeLabel(minutes: Int) = "%d:%02d".format(minutes / 60, minutes % 60)
+
+private enum class NotifyKind { MORNING, EVENING }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(state: AppState.Ready, viewModel: MainViewModel, onBack: () -> Unit, navigate: (String) -> Unit) {
@@ -97,6 +111,49 @@ fun SettingsScreen(state: AppState.Ready, viewModel: MainViewModel, onBack: () -
     var editor by remember { mutableStateOf<Editor?>(null) }
     var draft by remember { mutableIntStateOf(0) }
     var confirmReset by remember { mutableStateOf(false) }
+    var addingPreset by remember { mutableStateOf(false) }
+    var pickingTime by remember { mutableStateOf<NotifyKind?>(null) }
+    var pendingImport by remember { mutableStateOf<String?>(null) }
+    var pendingNotify by remember { mutableStateOf<NotifyKind?>(null) }
+
+    fun setNotify(kind: NotifyKind, on: Boolean) = viewModel.updateSettings {
+        if (kind == NotifyKind.MORNING) it.copy(morningNotify = on, notifyPromptDismissed = true) else it.copy(eveningNotify = on, notifyPromptDismissed = true)
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val kind = pendingNotify ?: return@rememberLauncherForActivityResult
+        if (granted) setNotify(kind, true) else messenger.show("通知が許可されていません。端末の設定から許可できます")
+        pendingNotify = null
+    }
+    fun toggleNotify(kind: NotifyKind, on: Boolean) {
+        if (on && !DailyNotifications.hasPermission(context) && Build.VERSION.SDK_INT >= 33) {
+            pendingNotify = kind
+            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            setNotify(kind, on)
+        }
+    }
+
+    val backupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    val json = viewModel.exportBackup()
+                    context.contentResolver.openOutputStream(uri)!!.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+                }.isSuccess
+            }
+            messenger.show(if (ok) "バックアップを書き出しました" else "書き出せませんでした。保存先を変えてもう一度お試しください")
+        }
+    }
+    val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            pendingImport = withContext(Dispatchers.IO) {
+                runCatching { context.contentResolver.openInputStream(uri)!!.use { it.readBytes().toString(Charsets.UTF_8) } }.getOrNull()
+            }
+            if (pendingImport == null) messenger.show("ファイルを読み込めませんでした")
+        }
+    }
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -155,6 +212,30 @@ fun SettingsScreen(state: AppState.Ready, viewModel: MainViewModel, onBack: () -
             }
         }
 
+        Group("お知らせ") {
+            NotifyRow("朝のお知らせ", "今日使える額", s.morningNotify, s.morningTime, { toggleNotify(NotifyKind.MORNING, it) }, { pickingTime = NotifyKind.MORNING })
+            HorizontalDivider(color = c.line)
+            NotifyRow("夜のリマインド", "記録忘れと明日の見込み", s.eveningNotify, s.eveningTime, { toggleNotify(NotifyKind.EVENING, it) }, { pickingTime = NotifyKind.EVENING })
+        }
+
+        Group("よく使う金額（1タップで記録）") {
+            state.presets.forEach { p ->
+                Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CategoryIcon(Categories.of(p.categoryId), 30.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text(p.label, color = c.ink, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    Text(formatYen(p.amount), color = c.muted, style = MonoStyle, fontSize = 13.sp)
+                    DbIconButton(DbIcons.Trash, "${p.label}を削除", onClick = { viewModel.deletePreset(p.id) }, tint = c.faint, modifier = Modifier.size(40.dp))
+                }
+                HorizontalDivider(color = c.line)
+            }
+            if (state.presets.size < 6) {
+                Item("＋ 追加する", null) { addingPreset = true }
+            } else {
+                Text("6個まで登録できます", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(14.dp))
+            }
+        }
+
         Group("表示") {
             Column(Modifier.padding(14.dp)) {
                 SegmentedControl(
@@ -167,8 +248,9 @@ fun SettingsScreen(state: AppState.Ready, viewModel: MainViewModel, onBack: () -
 
         Group("ホーム画面ウィジェット") {
             Column(Modifier.padding(14.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    WidgetTheme.entries.forEach { t ->
+                WidgetTheme.entries.chunked(3).forEach { rowThemes ->
+                Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    rowThemes.forEach { t ->
                         val locked = t != WidgetTheme.DARK && !s.isPro
                         val on = s.widgetTheme == t
                         val wc = WidgetColors.of(t)
@@ -190,9 +272,11 @@ fun SettingsScreen(state: AppState.Ready, viewModel: MainViewModel, onBack: () -
                             Text(t.label, color = c.ink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
+                    repeat(3 - rowThemes.size) { Spacer(Modifier.weight(1f)) }
+                }
                 }
                 Text(
-                    "ホーム画面を長押し →「ウィジェット」→ DayBudget から追加できます。" + if (s.isPro) "" else "無料版は小サイズ・ダークテーマのみです。",
+                    "ホーム画面を長押し →「ウィジェット」→ DayBudget から追加できます。小・中サイズは無料、大サイズの詳細表示と着せ替えは Pro 版です。",
                     color = c.muted, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 10.dp, start = 2.dp),
                 )
             }
@@ -202,6 +286,12 @@ fun SettingsScreen(state: AppState.Ready, viewModel: MainViewModel, onBack: () -
             Item("CSVで書き出す", null, pro = !s.isPro) {
                 requirePro { exportLauncher.launch("daybudget-${state.today.format(DateTimeFormatter.BASIC_ISO_DATE)}.csv") }
             }
+            HorizontalDivider(color = c.line)
+            Item("バックアップを書き出す", null) {
+                backupLauncher.launch("daybudget-backup-${state.today.format(DateTimeFormatter.BASIC_ISO_DATE)}.json")
+            }
+            HorizontalDivider(color = c.line)
+            Item("バックアップから復元", null) { restoreLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) }
             HorizontalDivider(color = c.line)
             Item("すべてのデータを消去", null, danger = true) { confirmReset = true }
             if (BuildConfig.DEBUG) {
@@ -239,6 +329,51 @@ fun SettingsScreen(state: AppState.Ready, viewModel: MainViewModel, onBack: () -
         }
     }
 
+    if (addingPreset) {
+        PresetSheet(onDismiss = { addingPreset = false }) { label, amount, cat ->
+            viewModel.addPreset(label, amount, cat)
+            messenger.show("「$label」を追加しました")
+        }
+    }
+
+    pickingTime?.let { kind ->
+        val current = if (kind == NotifyKind.MORNING) s.morningTime else s.eveningTime
+        val timeState = rememberTimePickerState(current / 60, current % 60, is24Hour = true)
+        AlertDialog(
+            onDismissRequest = { pickingTime = null },
+            title = { Text(if (kind == NotifyKind.MORNING) "朝のお知らせの時刻" else "夜のリマインドの時刻") },
+            text = { TimePicker(timeState) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val m = timeState.hour * 60 + timeState.minute
+                    viewModel.updateSettings { if (kind == NotifyKind.MORNING) it.copy(morningTime = m) else it.copy(eveningTime = m) }
+                    pickingTime = null
+                }) { Text("決定") }
+            },
+            dismissButton = { TextButton(onClick = { pickingTime = null }) { Text("キャンセル") } },
+            containerColor = c.surface,
+        )
+    }
+
+    pendingImport?.let { json ->
+        AlertDialog(
+            onDismissRequest = { pendingImport = null },
+            title = { Text("バックアップから復元しますか？") },
+            text = { Text("今の記録と設定は、バックアップの内容に置き換わります。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingImport = null
+                    scope.launch {
+                        val result = runCatching { viewModel.importBackup(json) }
+                        messenger.show(result.fold({ "復元しました" }, { it.message ?: "復元できませんでした" }))
+                    }
+                }) { Text("復元する", color = c.over, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { pendingImport = null }) { Text("キャンセル") } },
+            containerColor = c.surface,
+        )
+    }
+
     if (confirmReset) {
         AlertDialog(
             onDismissRequest = { confirmReset = false },
@@ -250,6 +385,23 @@ fun SettingsScreen(state: AppState.Ready, viewModel: MainViewModel, onBack: () -
             dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("キャンセル") } },
             containerColor = c.surface,
         )
+    }
+}
+
+@Composable
+private fun NotifyRow(title: String, sub: String, on: Boolean, minutes: Int, onToggle: (Boolean) -> Unit, onPickTime: () -> Unit) {
+    val c = Db.colors
+    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = c.ink, fontSize = 14.sp)
+            Text(sub, color = c.muted, fontSize = 12.sp)
+        }
+        Text(
+            timeLabel(minutes),
+            Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onPickTime).padding(horizontal = 10.dp, vertical = 6.dp),
+            color = if (on) c.ink else c.faint, style = MonoStyle, fontSize = 14.sp,
+        )
+        Switch(on, onToggle, colors = SwitchDefaults.colors(checkedTrackColor = c.ink, checkedThumbColor = c.appBg))
     }
 }
 

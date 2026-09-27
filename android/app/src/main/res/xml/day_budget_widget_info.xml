@@ -9,7 +9,7 @@
     android:targetCellWidth="2"
     android:targetCellHeight="2"
     android:maxResizeWidth="400dp"
-    android:maxResizeHeight="240dp"
+    android:maxResizeHeight="400dp"
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="1800000"
     android:widgetCategory="home_screen" />

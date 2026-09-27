@@ -55,6 +55,9 @@ android {
         unitTests.isIncludeAndroidResources = true
     }
 
+    // DB の移行テスト（Robolectric）で、書き出したスキーマ（schemas/）を読む。デバッグ版にだけ含める
+    sourceSets.getByName("debug").assets.srcDir("$projectDir/schemas")
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -101,6 +104,7 @@ dependencies {
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.roborazzi.junit.rule)
     testImplementation(libs.androidx.test.ext.junit)
+    testImplementation(libs.androidx.room.testing)
     testImplementation(platform(libs.androidx.compose.bom))
     testImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

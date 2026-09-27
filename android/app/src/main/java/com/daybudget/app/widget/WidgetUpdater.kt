@@ -50,11 +50,9 @@ class DayBudgetWidgetReceiver : GlanceAppWidgetReceiver() {
     }
 }
 
-/** 0時・時刻変更・タイムゾーン変更でウィジェットを更新する */
+/** 自分で予約した0時のアラームでウィジェットを翌日の表示に切り替える */
 class MidnightReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        // 自分で予約した0時の通知（action なし）と、システムの時刻変更だけを受け付ける
-        if (intent.action != null && intent.action !in SYSTEM_ACTIONS) return
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             try {
@@ -66,7 +64,4 @@ class MidnightReceiver : BroadcastReceiver() {
         }
     }
 
-    private companion object {
-        val SYSTEM_ACTIONS = setOf(Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED)
-    }
 }

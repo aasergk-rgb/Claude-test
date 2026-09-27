@@ -1,5 +1,22 @@
 package com.daybudget.app.ui.screens
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
+import com.daybudget.app.domain.Period
+import com.daybudget.app.notify.DailyNotifications
+import com.daybudget.app.ui.components.PlannedSheet
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntAsState
@@ -77,12 +94,36 @@ private val timeFormat = DateTimeFormatter.ofPattern("H:mm")
 @Composable
 fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: (SheetTarget) -> Unit, navigate: (String) -> Unit) {
     val c = Db.colors
-    val snap = remember(state) { BudgetCalculator.computeToday(state.settings, state.expenses, state.today) }
-    val days = remember(state) { BudgetCalculator.simulatePeriod(snap.period, state.settings, state.expenses, state.today) }
-    val todays = remember(state) { state.expenses.filter { it.date == state.today }.sortedByDescending { it.createdAt } }
     val scope = rememberCoroutineScope()
     val messenger = LocalMessenger.current
+    val snap = remember(state) { BudgetCalculator.computeToday(state.settings, state.expenses, state.today, state.planned) }
+    val days = remember(state) { BudgetCalculator.simulatePeriod(snap.period, state.settings, state.expenses, state.today, state.planned) }
+    val streak = remember(state) { BudgetCalculator.underBudgetStreak(state.settings, state.expenses, state.today, state.planned) }
+    val upcoming = remember(state) { state.planned.filter { !it.date.isBefore(state.today) }.sortedBy { it.date } }
+    var addingPlan by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    fun onNotifyAnswer(granted: Boolean) {
+        if (granted) {
+            viewModel.updateSettings { it.copy(morningNotify = true, eveningNotify = true, notifyPromptDismissed = true) }
+            messenger.show("毎朝と毎晩お知らせします。時刻は設定で変えられます")
+        } else {
+            viewModel.updateSettings { it.copy(notifyPromptDismissed = true) }
+        }
+    }
+    val notifyLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission(), ::onNotifyAnswer)
 
+    // 月度が切り替わったら、前の月度の振り返りを一度だけ見せる
+    LaunchedEffect(snap.period.start) {
+        val prev = Period.of(snap.period.start.minusDays(1), state.settings.closingDay)
+        val start = state.settings.startDate
+        if (start != null && !start.isAfter(prev.end) && state.settings.lastRecapEnd != prev.end) {
+            viewModel.updateSettings { it.copy(lastRecapEnd = prev.end) }
+            navigate(Routes.recap(prev.end))
+        }
+    }
+    val todays = remember(state) { state.expenses.filter { it.date == state.today }.sortedByDescending { it.createdAt } }
+
+    val haptics = LocalHapticFeedback.current
     val statusColor by animateColorAsState(c.status(snap.status), label = "status")
     val shown by animateIntAsState(snap.todayAvailable, tween(520), label = "amount")
     val progress by animateFloatAsState(snap.progressRate.toFloat().coerceIn(0f, 1f), tween(500), label = "meter")
@@ -113,7 +154,10 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
                 Column(Modifier.fillMaxWidth().padding(top = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("今日使えるお金", color = c.muted, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
                     BigAmount(shown, if (alarming) statusColor else c.ink, modifier = Modifier.padding(vertical = 4.dp))
-                    StatusChip(snap.status.label, statusColor)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        StatusChip(snap.status.label, statusColor)
+                        if (streak >= 2) StatusChip("予算内 ${streak}日連続", c.accentInk.takeIf { !c.isDark } ?: c.accent)
+                    }
                 }
             }
             item {
@@ -143,6 +187,47 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
                     Text(formatYen(value), color = c.great, fontSize = 14.sp, style = MonoStyle)
                 }
             }
+            if (state.presets.isNotEmpty()) item {
+                Column(Modifier.padding(top = 20.dp)) {
+                    SectionHeader("よく使う（タップで記録）", trailing = null)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(state.presets, key = { it.id }) { p ->
+                            QuickChip("${p.label} ${formatYen(p.amount)}", Categories.of(p.categoryId)) {
+                                scope.launch {
+                                    viewModel.quickAdd(p.id)?.let { added ->
+                                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                                        messenger.show("${p.label} ${formatYen(added.amount)} を記録しました", "元に戻す") {
+                                            scope.launch { viewModel.deleteExpense(added.id) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        item { QuickChip("編集", null) { navigate(Routes.SETTINGS) } }
+                    }
+                }
+            }
+            val showPrompt = !state.settings.notifyPromptDismissed && !state.settings.morningNotify && !state.settings.eveningNotify && state.expenses.isNotEmpty()
+            if (showPrompt) item {
+                Row(
+                    Modifier.padding(top = 18.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.ink).padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("毎朝「今日使える額」をお知らせしますか？", color = c.appBg, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text("夜には記録忘れを教えます", color = c.appBg.copy(alpha = 0.7f), fontSize = 12.sp)
+                    }
+                    Text(
+                        "オンにする",
+                        Modifier.clip(RoundedCornerShape(10.dp)).background(c.accent).clickable {
+                            if (Build.VERSION.SDK_INT >= 33 && !DailyNotifications.hasPermission(context)) notifyLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            else onNotifyAnswer(true)
+                        }.padding(horizontal = 12.dp, vertical = 8.dp),
+                        color = c.accentInk, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                    )
+                    DbIconButton(DbIcons.Close, "閉じる", onClick = { viewModel.updateSettings { it.copy(notifyPromptDismissed = true) } }, tint = c.appBg.copy(alpha = 0.7f), modifier = Modifier.size(40.dp))
+                }
+            }
             item {
                 Column(Modifier.padding(top = 22.dp)) {
                     SectionHeader("${snap.period.name}の歩み", trailing = "残り ${formatYen(snap.periodRemaining)}")
@@ -162,6 +247,29 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
                         Text(snap.period.start.md(), color = c.faint, fontSize = 11.sp)
                         Spacer(Modifier.weight(1f))
                         Text(snap.period.end.md(), color = c.faint, fontSize = 11.sp)
+                    }
+                }
+            }
+            if (state.settings.carryoverMode == CarryoverMode.DISTRIBUTE) {
+                item {
+                    Row(Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("予定している大きな出費", color = c.muted, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text("＋ 追加", Modifier.clip(RoundedCornerShape(8.dp)).clickable { addingPlan = true }.padding(horizontal = 8.dp, vertical = 4.dp), color = c.healthy, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                    if (upcoming.isEmpty()) {
+                        Text("飲み会や旅行など、先の大きな出費を入れておくと、その日まで少しずつ取り分けます。", color = c.faint, fontSize = 12.sp, lineHeight = 18.sp)
+                    }
+                }
+                items(upcoming, key = { it.id }) { p ->
+                    Row(
+                        Modifier.animateItem().padding(bottom = 6.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.surface)
+                            .border(1.dp, c.line, RoundedCornerShape(12.dp)).padding(start = 14.dp, end = 2.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(if (p.date == state.today) "今日" else p.date.md(), color = c.muted, fontSize = 12.sp, style = MonoStyle, modifier = Modifier.width(48.dp))
+                        Text(p.label, color = c.ink, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(formatYen(p.amount), color = c.ink, fontSize = 14.sp, style = MonoStyle)
+                        DbIconButton(DbIcons.Close, "予定を削除", onClick = { viewModel.deletePlanned(p.id) }, tint = c.faint, modifier = Modifier.size(40.dp))
                     }
                 }
             }
@@ -188,6 +296,27 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
         ) {
             PrimaryButton("支出を記録", onClick = { openSheet(SheetTarget.Add(state.today)) }, icon = DbIcons.Plus)
         }
+    }
+
+    if (addingPlan) {
+        PlannedSheet(state.today, onDismiss = { addingPlan = false }) { label, amount, date ->
+            viewModel.addPlanned(label, amount, date)
+            messenger.show("${date.md()}の「$label」を予定に入れました")
+        }
+    }
+}
+
+@Composable
+private fun QuickChip(text: String, category: Categories?, onClick: () -> Unit) {
+    val c = Db.colors
+    Row(
+        Modifier.clip(RoundedCornerShape(99.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(99.dp))
+            .clickable(role = Role.Button, onClick = onClick).padding(start = if (category != null) 6.dp else 14.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (category != null) CategoryIcon(category, 24.dp)
+        Text(text, color = if (category != null) c.ink else c.muted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     }
 }
 
