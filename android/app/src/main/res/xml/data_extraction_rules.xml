@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 機種変更時の引き継ぎ（端末間転送）とユーザー自身の Google バックアップのみ。アプリ独自の外部送信はしない -->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="database" path="daybudget.db" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="database" path="daybudget.db" />
+    </device-transfer>
+</data-extraction-rules>

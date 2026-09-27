@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DayBudget</string>
+    <string name="widget_name">今日使えるお金</string>
+    <string name="widget_description">今日あといくら使えるかをホーム画面に表示します</string>
+</resources>

@@ -16,6 +16,13 @@
 >   - [ ] Pro版の決済（Web は Stripe 等を検討）
 >   - [ ] アクセス解析（PostHog）
 >   - [ ] 公開（GitHub Pages など）
+> - **Android版（ネイティブ）**: `android/`（Kotlin + Jetpack Compose + Room + Glance）。Web版を包まずゼロから実装。
+>   - [x] 計算ロジック（Web版と同じ仕様）＋単体テスト、Room による端末内保存
+>   - [x] 全画面（初回設定・ダッシュボード・支出入力・履歴・設定・Pro版）、ダークモード
+>   - [x] ホーム画面ウィジェット（小・中、3テーマ、0時の自動切り替え）
+>   - [x] Robolectric 上で実際の画面を操作するテストとスクリーンショット、Lint エラー0
+>   - [ ] Google Play Billing（RevenueCat）による Pro 版購入
+>   - [ ] リリース署名鍵の作成と Google Play への登録
 
 ---
 
