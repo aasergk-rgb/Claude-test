@@ -3,6 +3,8 @@ package com.daybudget.app.widget
 import android.content.Context
 import android.content.Intent
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -49,6 +51,7 @@ import com.daybudget.app.domain.formatSignedYen
 import com.daybudget.app.domain.formatYen
 import com.daybudget.app.domain.md
 import com.daybudget.app.ui.Routes
+import kotlinx.coroutines.flow.combine
 import java.time.LocalDate
 
 /** ウィジェットに表示する値（DBから計算） */
@@ -98,8 +101,14 @@ class DayBudgetWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repo = (context.applicationContext as DayBudgetApp).repository
-        val data = WidgetData.from(repo.loadSettings(), repo.loadExpenses(), LocalDate.now())
-        provideContent { WidgetContent(context, data) }
+        val initial = WidgetData.from(repo.loadSettings(), repo.loadExpenses(), LocalDate.now())
+        // ウィジェットの表示中はデータベースの変化を直接受け取って描き直す。
+        // （最初に1回読むだけだと、表示中の更新で古い値が出たままになる）
+        val updates = combine(repo.settings, repo.expenses) { s, e -> WidgetData.from(s, e, LocalDate.now()) }
+        provideContent {
+            val data by updates.collectAsState(initial)
+            WidgetContent(context, data)
+        }
     }
 }
 
