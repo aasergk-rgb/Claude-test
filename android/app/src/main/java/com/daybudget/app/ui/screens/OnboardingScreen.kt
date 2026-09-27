@@ -2,6 +2,7 @@ package com.daybudget.app.ui.screens
 
 import android.Manifest
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
@@ -110,6 +111,9 @@ fun OnboardingScreen(today: LocalDate, onDone: (choices: OnboardingChoices, open
             step = 5
         }
     }
+
+    // 端末の「戻る」は、アプリを閉じずに前の手順へ
+    BackHandler(enabled = step > 0) { step -= 1 }
 
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding().padding(horizontal = 20.dp)) {
         Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 26.dp), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)) {

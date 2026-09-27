@@ -99,7 +99,11 @@ fun ExpenseSheet(target: SheetTarget, state: AppState.Ready, viewModel: MainView
     var digits by rememberSaveable(target) { mutableStateOf(editing?.amount?.let { kotlin.math.abs(it).toString() } ?: "") }
     // 収入・返金はマイナスの支出として保存する
     var income by rememberSaveable(target) { mutableStateOf(editing?.isIncome ?: false) }
-    var categoryId by rememberSaveable(target) { mutableStateOf(editing?.categoryId ?: state.settings.lastCategoryId) }
+    var categoryId by rememberSaveable(target) {
+        // 前回のカテゴリが消えたり非表示になっていたら、先頭のカテゴリにする
+        val last = state.settings.lastCategoryId.takeIf { id -> Categories.entries.any { it.id == id } } ?: Categories.entries.firstOrNull()?.id ?: Categories.OTHER.id
+        mutableStateOf(editing?.categoryId?.takeIf { it != Categories.INCOME.id } ?: last)
+    }
     var memo by rememberSaveable(target) { mutableStateOf(editing?.memo ?: "") }
     var date by remember(target) { mutableStateOf(editing?.date ?: (target as SheetTarget.Add).date) }
     var pickingDate by remember { mutableStateOf(false) }

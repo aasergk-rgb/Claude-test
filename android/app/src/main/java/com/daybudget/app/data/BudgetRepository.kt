@@ -218,7 +218,11 @@ class BudgetRepository(
         val now = clock()
         val expense = Expense(UUID.randomUUID().toString(), amount, categoryId, memo, date, now, now)
         dao.insertExpense(expense.toEntity())
-        loadSettings()?.let { if (it.lastCategoryId != categoryId) dao.upsertSettings(it.copy(lastCategoryId = categoryId).toEntity(dao.getSettings()!!.createdAt, now.toString())) }
+        // 収入は「前回のカテゴリ」として覚えない
+        val current = dao.getSettings()
+        if (current != null && categoryId != Categories.INCOME.id && current.lastCategoryId != categoryId) {
+            dao.upsertSettings(current.copy(lastCategoryId = categoryId, updatedAt = now.toString()))
+        }
         onDataChanged()
         return expense
     }

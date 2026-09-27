@@ -37,6 +37,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -189,11 +190,14 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
         val m = reachedMilestone(streak) ?: return@LaunchedEffect
         val key = "${state.today.minusDays(streak.toLong())}:$m"
         if (prefs.celebratedStreak != key) {
-            prefs.celebratedStreak = key
             delay(if (earnedBonus > 0) 2200 else 400)
             celebrate = m
+            prefs.celebratedStreak = key
         }
     }
+
+    // ダッシュボードを離れたら、飛ばす先（大きな数字の位置）を忘れる
+    DisposableEffect(Unit) { onDispose { fly.heroCenter = null } }
 
     // 記録が着地したら大きな数字を少し弾ませる
     val bump = remember { Animatable(1f) }
@@ -215,11 +219,13 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
         }
     }
 
-    fun duplicate(e: Expense) {
-        viewModel.addExpense(e.amount, e.categoryId, e.memo, state.today)
+    fun duplicate(e: Expense) = scope.launch {
+        val added = viewModel.addExpenseNow(e.amount, e.categoryId, e.memo, state.today)
         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
         fly.launch(e.amount, null)
-        messenger.show("${e.memo ?: Categories.of(e.categoryId).label} ${formatYen(e.amount)} をもう一度記録しました")
+        messenger.show("${e.memo ?: Categories.of(e.categoryId).label} ${formatYen(kotlin.math.abs(e.amount))} をもう一度記録しました", "元に戻す") {
+            scope.launch { viewModel.deleteExpense(added.id) }
+        }
     }
 
     Box(Modifier.fillMaxSize()) {

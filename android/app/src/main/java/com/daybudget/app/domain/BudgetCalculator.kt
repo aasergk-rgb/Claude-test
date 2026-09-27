@@ -204,7 +204,7 @@ object BudgetCalculator {
         var run = 0
         counted.forEach { d -> if (d.spent <= d.budget) { run++; longest = maxOf(longest, run) } else run = 0 }
         val byCategory = expenses.filter { !it.date.isBefore(range.from) && !it.date.isAfter(period.end) }
-            .filter { !it.isIncome }
+            .filter { !it.isIncome && it.categoryId != Categories.INCOME.id }
             .groupingBy { it.categoryId }.fold(0) { acc, e -> acc + e.amount }
             .maxByOrNull { it.value }
         val spent = days.sumOf { it.spent }
@@ -224,7 +224,7 @@ object BudgetCalculator {
 
     /** 期間中のカテゴリ別の支出（多い順。収入・返金は含めない） */
     fun categoryTotals(expenses: List<Expense>, from: LocalDate, to: LocalDate): List<Pair<Category, Int>> =
-        expenses.filter { !it.isIncome && !it.date.isBefore(from) && !it.date.isAfter(to) }
+        expenses.filter { !it.isIncome && it.categoryId != Categories.INCOME.id && !it.date.isBefore(from) && !it.date.isAfter(to) }
             .groupingBy { Categories.of(it.categoryId).id }.fold(0) { acc, e -> acc + e.amount }
             .map { (id, total) -> Categories.of(id) to total }
             .sortedByDescending { it.second }

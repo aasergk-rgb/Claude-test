@@ -273,8 +273,12 @@ fun HistoryScreen(
                     }
                 },
                 onDuplicate = {
-                    viewModel.addExpense(e.amount, e.categoryId, e.memo, state.today)
-                    messenger.show("今日の支出として ${formatYen(e.amount)} を記録しました")
+                    scope.launch {
+                        val added = viewModel.addExpenseNow(e.amount, e.categoryId, e.memo, state.today)
+                        messenger.show("今日の支出として ${formatYen(kotlin.math.abs(e.amount))} を記録しました", "元に戻す") {
+                            scope.launch { viewModel.deleteExpense(added.id) }
+                        }
+                    }
                 },
                 modifier = Modifier.animateItem().padding(bottom = 8.dp),
             ) {

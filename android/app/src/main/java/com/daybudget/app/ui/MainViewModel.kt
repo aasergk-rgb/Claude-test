@@ -88,6 +88,10 @@ class MainViewModel(private val repo: BudgetRepository) : ViewModel() {
     fun addExpense(amount: Int, categoryId: String, memo: String?, date: LocalDate) =
         viewModelScope.launch { repo.addExpense(amount, categoryId, memo, date) }
 
+    /** 記録して、その記録を返す（「元に戻す」で消すため） */
+    suspend fun addExpenseNow(amount: Int, categoryId: String, memo: String?, date: LocalDate): Expense =
+        repo.addExpense(amount, categoryId, memo, date)
+
     fun updateExpense(id: String, amount: Int, categoryId: String, memo: String?, date: LocalDate) =
         viewModelScope.launch { repo.updateExpense(id, amount, categoryId, memo, date) }
 
