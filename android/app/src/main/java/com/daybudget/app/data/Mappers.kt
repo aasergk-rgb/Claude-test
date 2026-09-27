@@ -31,6 +31,7 @@ fun SettingsEntity.toDomain() = UserSettings(
     presetsSeeded = presetsSeeded,
     weekendBoostPct = weekendBoostPct,
     weekendDays = weekendDays.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet(),
+    firstPeriodBudget = firstPeriodBudget,
 )
 
 fun UserSettings.toEntity(createdAt: String, updatedAt: String) = SettingsEntity(
@@ -54,6 +55,7 @@ fun UserSettings.toEntity(createdAt: String, updatedAt: String) = SettingsEntity
     presetsSeeded = presetsSeeded,
     weekendBoostPct = weekendBoostPct,
     weekendDays = weekendDays.sorted().joinToString(","),
+    firstPeriodBudget = firstPeriodBudget,
 )
 
 fun CategoryEntity.toDomain() = Category(id, name, color, icon, order, hidden, builtIn)

@@ -59,6 +59,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.daybudget.app.domain.amountLabel
 import com.daybudget.app.domain.Categories
 import com.daybudget.app.domain.Expense
 import com.daybudget.app.domain.isIncome
@@ -136,7 +137,7 @@ fun ExpenseSheet(target: SheetTarget, state: AppState.Ready, viewModel: MainView
         val e = editing ?: return
         scope.launch {
             viewModel.deleteExpense(e.id)?.let { removed ->
-                messenger.show("${Categories.of(removed.categoryId).label} ${formatYen(removed.amount)} を削除しました", "元に戻す") {
+                messenger.show("${Categories.of(removed.categoryId).label} ${removed.amountLabel()} を削除しました", "元に戻す") {
                     viewModel.restoreExpense(removed)
                 }
             }

@@ -24,6 +24,7 @@ class RandomizedInvariantsTest {
             weekendBoostPct = listOf(100, 125, 150, 200).random(rnd),
             weekendDays = listOf(setOf(6, 7), setOf(5, 6, 7), setOf(7)).random(rnd),
             startDate = if (rnd.nextBoolean()) today.minusDays(rnd.nextLong(0, 70)) else null,
+            firstPeriodBudget = if (rnd.nextInt(3) == 0) rnd.nextInt(0, 100_000) else null,
             onboarded = true,
         )
         var n = 0

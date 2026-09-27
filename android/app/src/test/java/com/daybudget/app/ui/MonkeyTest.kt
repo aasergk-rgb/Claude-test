@@ -11,7 +11,9 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import com.github.takahirom.roborazzi.captureRoboImage
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
@@ -60,6 +62,10 @@ class MonkeyTest {
     @Test fun monkeySeedA() = monkey(seed = 1, steps = 45)
 
     @Test fun monkeySeedB() = monkey(seed = 42, steps = 45)
+
+    @Test fun monkeySeedC() = monkey(seed = 7, steps = 45)
+
+    @Test fun monkeySeedD() = monkey(seed = 2026, steps = 45)
 
     private fun monkey(seed: Int, steps: Int) {
         runBlocking {
@@ -132,8 +138,15 @@ class MonkeyTest {
                 toDashboard()
 
                 // 画面の「今日の支出 N件」とデータが一致する
-                val n = todayCount()
-                rule.waitUntil(5_000) { has("${n}件") }
+                // DB の書き込みは別スレッドで進むので、待つ間は毎回データを読み直す
+                var n = todayCount()
+                try {
+                    rule.waitUntil(5_000) { n = todayCount(); has("${n}件") }
+                } catch (e: Throwable) {
+                    rule.onRoot().captureRoboImage("build/outputs/roborazzi/monkey_fail_seed$seed.png")
+                    val rowsInDb = runBlocking { app.repository.loadExpenses() }.map { "${it.date} ${it.amount} ${it.categoryId} ${it.memo} ${it.createdAt}" }
+                    throw AssertionError("画面の件数がデータ($n 件)と合わない / DB $rowsInDb / 今日 ${LocalDate.now()} / 操作 $log", e)
+                }
                 // 見えている行が横にずれていない（ゴミ箱ボタンの位置がそろっている）
                 val lefts = rule.onAllNodesWithContentDescription("削除").fetchSemanticsNodes()
                     .map { it.boundsInRoot }.filter { it.width > 0f && it.height > 0f }.map { it.left }

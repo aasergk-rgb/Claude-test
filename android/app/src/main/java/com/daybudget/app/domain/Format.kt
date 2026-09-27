@@ -22,3 +22,6 @@ fun LocalDate.md(): String = "$monthValue/$dayOfMonth"
 fun LocalDate.longJa(): String = "${monthValue}月${dayOfMonth}日(${weekdayJa()})"
 
 fun closingLabel(day: Int): String = if (day >= CLOSING_END_OF_MONTH) "月末" else "${day}日"
+
+/** 記録の金額を画面と同じ向きで表す（収入は +¥200、支出は ¥200） */
+fun Expense.amountLabel(): String = if (isIncome) "+" + formatYen(-amount) else formatYen(amount)

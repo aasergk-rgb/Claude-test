@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.daybudget.app.domain.amountLabel
 import com.daybudget.app.domain.BudgetCalculator
 import com.daybudget.app.domain.DayState
 import com.daybudget.app.domain.DaySummary
@@ -89,7 +90,7 @@ fun HistoryScreen(
 
     val period = remember(anchor, settings.closingDay) { Period.of(LocalDate.parse(anchor), settings.closingDay) }
     val isCurrent = state.today in period
-    val range = BudgetCalculator.activeRange(period, settings.monthlyBudget, settings.startDate)
+    val range = BudgetCalculator.activeRange(period, settings)
     val days = remember(period, state) { BudgetCalculator.simulatePeriod(period, settings, state.expenses, state.today, state.planned) }
     val spent = days.sumOf { it.spent }
     val third = if (isCurrent) {
@@ -140,7 +141,7 @@ fun HistoryScreen(
         item {
             Panel(Modifier.padding(top = 12.dp, bottom = 18.dp)) {
                 Row {
-                    Stat(if (range.budget < settings.monthlyBudget) "予算（日割り）" else "今月の予算", formatYen(range.budget), c.ink, Modifier.weight(1f))
+                    Stat(if (range.days < period.days) "予算（途中から）" else "今月の予算", formatYen(range.budget), c.ink, Modifier.weight(1f))
                     Box(Modifier.width(1.dp).height(62.dp).background(c.line))
                     Stat("累計支出", formatYen(spent), c.ink, Modifier.weight(1f))
                     Box(Modifier.width(1.dp).height(62.dp).background(c.line))
@@ -266,7 +267,7 @@ fun HistoryScreen(
                 onDelete = {
                     scope.launch {
                         viewModel.deleteExpense(e.id)?.let { removed ->
-                            messenger.show("${Categories.of(removed.categoryId).label} ${formatYen(removed.amount)} を削除しました", "元に戻す") {
+                            messenger.show("${Categories.of(removed.categoryId).label} ${removed.amountLabel()} を削除しました", "元に戻す") {
                                 viewModel.restoreExpense(removed)
                             }
                         }

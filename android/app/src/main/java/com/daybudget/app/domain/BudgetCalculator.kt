@@ -100,13 +100,21 @@ object BudgetCalculator {
     private fun fixedBudget(settings: UserSettings, period: Period, date: LocalDate): Int =
         Math.floorDiv(settings.monthlyBudget.toLong() * weightOf(settings, date), weightSum(settings, period.start, period.end)).toInt()
 
-    fun activeRange(period: Period, monthlyBudget: Int, startDate: LocalDate?): ActiveRange {
+    /**
+     * 月度の途中から始めた場合、その月度は使い始めた日から数え、予算は
+     * 初回設定で入れた「今月の残り」（なければ残り日数での按分）にする。
+     */
+    fun activeRange(period: Period, monthlyBudget: Int, startDate: LocalDate?, firstPeriodBudget: Int? = null): ActiveRange {
         if (startDate == null || !startDate.isAfter(period.start) || startDate.isAfter(period.end)) {
             return ActiveRange(period.start, period.days, monthlyBudget)
         }
         val days = daysBetween(startDate, period.end) + 1
-        return ActiveRange(startDate, days, (monthlyBudget.toLong() * days / period.days).toInt())
+        val budget = firstPeriodBudget ?: (monthlyBudget.toLong() * days / period.days).toInt()
+        return ActiveRange(startDate, days, budget)
     }
+
+    fun activeRange(period: Period, settings: UserSettings): ActiveRange =
+        activeRange(period, settings.monthlyBudget, settings.startDate, settings.firstPeriodBudget)
 
     fun totalsByDate(expenses: List<Expense>): Map<LocalDate, Int> =
         expenses.groupingBy { it.date }.fold(0) { acc, e -> acc + e.amount }
@@ -123,7 +131,7 @@ object BudgetCalculator {
         planned: List<PlannedExpense> = emptyList(),
     ): List<DaySummary> {
         val totals = totalsByDate(expenses)
-        val range = activeRange(period, settings.monthlyBudget, settings.startDate)
+        val range = activeRange(period, settings)
         val reserves = reservesByDate(planned, range.from, period.end)
         var remaining = range.budget
         return period.dates().map { date ->
@@ -152,9 +160,12 @@ object BudgetCalculator {
     private fun distributeBudget(settings: UserSettings, remaining: Int, date: LocalDate, end: LocalDate, reserves: Map<LocalDate, Int>): Int {
         val onDay = reserves[date] ?: 0
         val ahead = reserves.filterKeys { it.isAfter(date) }.values.sum()
-        val regular = (remaining - ahead - onDay).toLong()
+        val available = remaining - ahead
+        // 予約が残りのお金より大きいときは、あるお金までしか割り当てない（ないお金は増やさない）
+        if (available <= onDay) return maxOf(0, available)
+        val regular = (available - onDay).toLong()
         val share = Math.floorDiv(regular * weightOf(settings, date), weightSum(settings, date, end))
-        return maxOf(0, share.toInt()) + onDay
+        return share.toInt() + onDay
     }
 
     private fun reservesByDate(planned: List<PlannedExpense>, from: LocalDate, to: LocalDate): Map<LocalDate, Int> =
@@ -197,7 +208,7 @@ object BudgetCalculator {
     }
 
     fun recap(period: Period, settings: UserSettings, expenses: List<Expense>, today: LocalDate, planned: List<PlannedExpense> = emptyList()): PeriodRecap {
-        val range = activeRange(period, settings.monthlyBudget, settings.startDate)
+        val range = activeRange(period, settings)
         val days = simulatePeriod(period, settings, expenses, today, planned)
         val counted = days.filter { it.state == DayState.UNDER || it.state == DayState.OVER || it.state == DayState.TODAY }
         var longest = 0
@@ -236,7 +247,7 @@ object BudgetCalculator {
         planned: List<PlannedExpense> = emptyList(),
     ): TodaySnapshot {
         val period = Period.of(today, settings.closingDay)
-        val range = activeRange(period, settings.monthlyBudget, settings.startDate)
+        val range = activeRange(period, settings)
         val inPeriod = expenses.filter { !it.date.isBefore(range.from) && !it.date.isAfter(today) }
         val periodSpent = inPeriod.sumOf { it.amount }
         val todaySpent = inPeriod.filter { it.date == today }.sumOf { it.amount }

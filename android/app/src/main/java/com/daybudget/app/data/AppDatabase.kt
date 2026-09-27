@@ -9,9 +9,9 @@ import androidx.room.RoomDatabase
 /** 端末内だけに保存する SQLite データベース。外部とは通信しない */
 @Database(
     entities = [SettingsEntity::class, ExpenseEntity::class, PresetEntity::class, PlannedEntity::class, CategoryEntity::class, RecurringEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun dao(): BudgetDao

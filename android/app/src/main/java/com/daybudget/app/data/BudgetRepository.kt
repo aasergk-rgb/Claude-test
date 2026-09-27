@@ -195,6 +195,7 @@ class BudgetRepository(
                 onboarded = true,
                 startDate = today,
                 presetsSeeded = true,
+                firstPeriodBudget = choices.firstPeriodBudget,
                 morningNotify = choices.morningNotify,
                 eveningNotify = choices.eveningNotify,
                 // 初回設定で聞いたので、ホームでは改めて聞かない

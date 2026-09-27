@@ -32,6 +32,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -73,9 +74,10 @@ import com.daybudget.app.ui.theme.Db
 import com.daybudget.app.ui.theme.MonoStyle
 import java.time.LocalDate
 
-private const val STEPS = 6
+/** 初回設定の手順。「今月の残り」は月度の途中から始めるときだけ出す */
+private enum class Page { INTRO, BUDGET, CLOSING, REMAINING, PRESETS, NOTIFY, PRO }
 
-/** 初回設定: 紹介 → 予算 → 締め日 → よく使う金額 → お知らせ → Pro版のおすすめ */
+/** 初回設定: 紹介 → 予算 → 締め日 →（今月の残り）→ よく使う金額 → お知らせ → Pro版のおすすめ */
 @Composable
 fun OnboardingScreen(today: LocalDate, onDone: (choices: OnboardingChoices, openPaywall: Boolean) -> Unit) {
     val c = Db.colors
@@ -89,6 +91,23 @@ fun OnboardingScreen(today: LocalDate, onDone: (choices: OnboardingChoices, open
     var morning by rememberSaveable { mutableStateOf(true) }
     var evening by rememberSaveable { mutableStateOf(true) }
     var notifyGranted by rememberSaveable { mutableStateOf(true) }
+    // 今月の残り（null なら日割りで自動計算）。予算や締め日を変えたら自動に戻す
+    var customRemaining by rememberSaveable { mutableStateOf<Int?>(null) }
+    var remainingKey by rememberSaveable { mutableStateOf("$budget:$closingDay") }
+    LaunchedEffect(budget, closingDay) {
+        val key = "$budget:$closingDay"
+        if (key != remainingKey) {
+            remainingKey = key
+            customRemaining = null
+        }
+    }
+
+    val period = Period.of(today, closingDay)
+    val prorated = BudgetCalculator.activeRange(period, budget, today)
+    val midPeriod = prorated.days < period.days
+    val pages = Page.entries.filter { it != Page.REMAINING || midPeriod }
+    val page = pages[step.coerceIn(0, pages.lastIndex)]
+    fun go(p: Page) { step = pages.indexOf(p) }
 
     fun choices() = OnboardingChoices(
         monthlyBudget = budget,
@@ -96,11 +115,12 @@ fun OnboardingScreen(today: LocalDate, onDone: (choices: OnboardingChoices, open
         presets = picked.sorted().map { PRESET_SUGGESTIONS[it] },
         morningNotify = morning && notifyGranted,
         eveningNotify = evening && notifyGranted,
+        firstPeriodBudget = if (midPeriod) customRemaining else null,
     )
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         notifyGranted = granted
-        step = 5
+        go(Page.PRO)
     }
 
     fun afterNotifyStep() {
@@ -108,7 +128,7 @@ fun OnboardingScreen(today: LocalDate, onDone: (choices: OnboardingChoices, open
         if (wantsAny && Build.VERSION.SDK_INT >= 33 && !DailyNotifications.hasPermission(context)) {
             permission.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
-            step = 5
+            go(Page.PRO)
         }
     }
 
@@ -117,23 +137,22 @@ fun OnboardingScreen(today: LocalDate, onDone: (choices: OnboardingChoices, open
 
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding().padding(horizontal = 20.dp)) {
         Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 26.dp), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)) {
-            repeat(STEPS) { i ->
+            repeat(pages.size) { i ->
                 val w by animateDpAsState(if (i == step) 36.dp else 16.dp, label = "step")
                 Box(Modifier.width(w).height(5.dp).clip(RoundedCornerShape(9.dp)).background(if (i <= step) c.ink else c.line))
             }
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).animateContentSize()) {
-            when (step) {
-                0 -> Intro()
-                1 -> {
+            when (page) {
+                Page.INTRO -> Intro()
+                Page.BUDGET -> {
                     Heading("1か月に自由に使えるお金は？", "家賃や光熱費など、毎月決まって出ていくお金を除いた金額です。")
                     BudgetInput(budget) { budget = it }
                     Spacer(Modifier.height(18.dp))
                     PreviewBox(listOf("1日あたり" to "約 ${formatYen(budget / 30)}"))
                 }
-                2 -> {
-                    val period = Period.of(today, closingDay)
-                    val range = BudgetCalculator.activeRange(period, budget, today)
+                Page.CLOSING -> {
+                    val range = prorated
                     Heading("毎月何日で区切りますか？", "選んだ日の翌日から、新しい月度が始まります。給料日の前日を選ぶ人が多いです。")
                     ClosingDayPicker(closingDay, showAll) { closingDay = it }
                     if (!showAll) {
@@ -146,12 +165,43 @@ fun OnboardingScreen(today: LocalDate, onDone: (choices: OnboardingChoices, open
                     PreviewBox(
                         buildList {
                             add("今の月度" to "${period.start.md()}〜${period.end.md()}（${period.days}日間）")
-                            if (range.days < period.days) add("今月度の予算（今日から${range.days}日分）" to formatYen(range.budget))
-                            add("1日あたり" to formatYen(range.budget / range.days))
+                            if (range.days < period.days) add("今月度の残り（今日から${range.days}日）" to "次で決めます")
+                            else add("1日あたり" to formatYen(range.budget / range.days))
                         },
                     )
                 }
-                3 -> {
+                Page.REMAINING -> {
+                    val remaining = customRemaining ?: prorated.budget
+                    Heading(
+                        "今月の残りはいくらですか？",
+                        "${period.start.md()}〜${period.end.md()} の月度は、今日を入れてあと${prorated.days}日です。今月もう使った分を除いた、自由に使えるお金の残りを入れてください。",
+                    )
+                    BudgetInput(remaining, showPresets = false) { customRemaining = it }
+                    Spacer(Modifier.height(14.dp))
+                    if (customRemaining != null && customRemaining != prorated.budget) {
+                        TextButton(onClick = { customRemaining = null }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                            Text("日割りの ${formatYen(prorated.budget)} に戻す", color = c.healthy, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Text(
+                            "わからなければそのままで大丈夫です（月の予算 ${formatYen(budget)} を日割りした額）。",
+                            color = c.muted, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(horizontal = 4.dp),
+                        )
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    PreviewBox(
+                        listOf(
+                            "今月度の残り（${prorated.days}日）" to formatYen(remaining),
+                            "1日あたり" to formatYen(remaining / prorated.days),
+                            "来月度から" to "月の予算 ${formatYen(budget)}",
+                        ),
+                    )
+                    Text(
+                        "この金額はここでだけ決められます。あとから変えるには「すべてのデータを消去」して最初から設定します。",
+                        color = c.faint, fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 10.dp, start = 4.dp),
+                    )
+                }
+                Page.PRESETS -> {
                     Heading("よく使う出費はどれですか？", "選んだものは、ホーム画面とウィジェットから1タップで記録できます。あとで設定から変えられます。")
                     PRESET_SUGGESTIONS.forEachIndexed { i, (label, amount, cat) ->
                         val on = i in picked
@@ -178,36 +228,38 @@ fun OnboardingScreen(today: LocalDate, onDone: (choices: OnboardingChoices, open
                     }
                     Text("${picked.size}/${MAX_PRESETS}個まで選べます", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                 }
-                4 -> {
+                Page.NOTIFY -> {
                     Heading("お知らせを受け取りますか？", "続けるコツは、毎日「今日いくら使えるか」を目にすることです。")
                     NotifyChoice("朝のお知らせ（8:00）", "例：「今日は ¥1,850 使えます」", morning) { morning = it }
                     Spacer(Modifier.height(10.dp))
                     NotifyChoice("夜のリマインド（21:00）", "記録忘れと、明日使える額の見込み", evening) { evening = it }
                     Text("時刻はあとで設定から変えられます。", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))
                 }
-                else -> ProPitch()
+                Page.PRO -> ProPitch()
             }
         }
         Column(Modifier.padding(top = 20.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            when (step) {
-                0 -> PrimaryButton("はじめる", onClick = { step = 1 })
-                1 -> {
-                    PrimaryButton("次へ", onClick = { step = 2 }, enabled = budget > 0)
-                    GhostButton("戻る", onClick = { step = 0 })
+            val next = { step = (step + 1).coerceAtMost(pages.lastIndex) }
+            val prev = { step = (step - 1).coerceAtLeast(0) }
+            when (page) {
+                Page.INTRO -> PrimaryButton("はじめる", onClick = next)
+                Page.BUDGET -> {
+                    PrimaryButton("次へ", onClick = next, enabled = budget > 0)
+                    GhostButton("戻る", onClick = prev)
                 }
-                2 -> {
-                    PrimaryButton("次へ", onClick = { step = 3 })
-                    GhostButton("戻る", onClick = { step = 1 })
+                Page.CLOSING, Page.REMAINING -> {
+                    PrimaryButton("次へ", onClick = next)
+                    GhostButton("戻る", onClick = prev)
                 }
-                3 -> {
-                    PrimaryButton(if (picked.isEmpty()) "選ばずに次へ" else "次へ", onClick = { step = 4 })
-                    GhostButton("戻る", onClick = { step = 2 })
+                Page.PRESETS -> {
+                    PrimaryButton(if (picked.isEmpty()) "選ばずに次へ" else "次へ", onClick = next)
+                    GhostButton("戻る", onClick = prev)
                 }
-                4 -> {
+                Page.NOTIFY -> {
                     PrimaryButton(if (morning || evening) "次へ" else "受け取らずに次へ", onClick = ::afterNotifyStep)
-                    GhostButton("戻る", onClick = { step = 3 })
+                    GhostButton("戻る", onClick = prev)
                 }
-                else -> {
+                Page.PRO -> {
                     PrimaryButton("Pro版にする（¥1,000）", onClick = { onDone(choices(), true) }, icon = DbIcons.Spark)
                     GhostButton("まずは無料ではじめる", onClick = { onDone(choices(), false) })
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {

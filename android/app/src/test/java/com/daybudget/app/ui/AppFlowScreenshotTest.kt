@@ -70,6 +70,12 @@ class AppFlowScreenshotTest {
         rule.onNodeWithText("次へ").performClick()
         shot("03_onboarding_closing")
         rule.onNodeWithText("次へ").performClick()
+        // 月度の途中なら「今月の残り」を聞かれる（そのまま日割りで進む）
+        rule.waitForIdle()
+        if (rule.onAllNodes(hasText("今月の残りはいくらですか？")).fetchSemanticsNodes().isNotEmpty()) {
+            shot("03a_onboarding_remaining")
+            rule.onNodeWithText("次へ").performClick()
+        }
         waitFor("よく使う出費はどれですか？")
         rule.onNodeWithText("電車").performClick()
         shot("03b_onboarding_presets")

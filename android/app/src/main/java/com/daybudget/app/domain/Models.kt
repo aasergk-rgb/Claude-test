@@ -71,6 +71,11 @@ data class UserSettings(
     val weekendBoostPct: Int = 100,
     /** 週末として扱う曜日（ISO: 月=1 … 日=7） */
     val weekendDays: Set<Int> = setOf(6, 7),
+    /**
+     * 月度の途中から始めたときの「今月の残り」（初回設定でだけ決める）。
+     * null なら月の予算を残り日数で按分する。
+     */
+    val firstPeriodBudget: Int? = null,
 )
 
 /**
@@ -161,6 +166,8 @@ data class OnboardingChoices(
     val presets: List<Triple<String, Int, String>>,
     val morningNotify: Boolean,
     val eveningNotify: Boolean,
+    /** 今月の残り（月度の途中から始めるときだけ。null なら按分） */
+    val firstPeriodBudget: Int? = null,
 )
 
 /** お祝いする連続日数の節目 */

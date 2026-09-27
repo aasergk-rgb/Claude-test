@@ -49,6 +49,7 @@ object Backup {
         .put("notify_prompt_dismissed", s.notifyPromptDismissed).put("last_recap_end", s.lastRecapEnd ?: JSONObject.NULL)
         .put("presets_seeded", s.presetsSeeded)
         .put("weekend_boost_pct", s.weekendBoostPct).put("weekend_days", s.weekendDays)
+        .put("first_period_budget", s.firstPeriodBudget ?: JSONObject.NULL)
 
     /** 不正なファイルなら IllegalArgumentException */
     fun decode(json: String): Contents {
@@ -68,6 +69,7 @@ object Backup {
             presetsSeeded = s.optBoolean("presets_seeded", true),
             weekendBoostPct = s.optInt("weekend_boost_pct", 100),
             weekendDays = s.optString("weekend_days", "6,7"),
+            firstPeriodBudget = if (s.has("first_period_budget") && !s.isNull("first_period_budget")) s.getInt("first_period_budget") else null,
         )
         fun JSONArray.objects() = (0 until length()).map { getJSONObject(it) }
         return Contents(

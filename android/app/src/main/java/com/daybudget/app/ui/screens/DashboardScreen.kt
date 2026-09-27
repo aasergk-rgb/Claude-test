@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.TextAlign
+import com.daybudget.app.domain.amountLabel
 import com.daybudget.app.domain.isIncome
 import com.daybudget.app.domain.isRecurring
 import com.daybudget.app.domain.reachedMilestone
@@ -213,7 +214,7 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
 
     fun delete(e: Expense) = scope.launch {
         viewModel.deleteExpense(e.id)?.let { removed ->
-            messenger.show("${Categories.of(removed.categoryId).label} ${formatYen(removed.amount)} を削除しました", "元に戻す") {
+            messenger.show("${Categories.of(removed.categoryId).label} ${removed.amountLabel()} を削除しました", "元に戻す") {
                 viewModel.restoreExpense(removed)
             }
         }

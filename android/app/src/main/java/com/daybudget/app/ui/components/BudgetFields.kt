@@ -41,7 +41,7 @@ val BUDGET_PRESETS = listOf(30_000, 50_000, 80_000, 100_000)
 const val MAX_BUDGET = 9_999_999
 
 @Composable
-fun BudgetInput(value: Int, onChange: (Int) -> Unit) {
+fun BudgetInput(value: Int, showPresets: Boolean = true, onChange: (Int) -> Unit) {
     val c = Db.colors
     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Column(Modifier.padding(horizontal = 20.dp)) {
@@ -65,7 +65,7 @@ fun BudgetInput(value: Int, onChange: (Int) -> Unit) {
             }
             HorizontalDivider(thickness = 2.dp, color = c.ink)
         }
-        ChoiceGrid(BUDGET_PRESETS.map { it to "${it / 10_000}万" }, value, columns = 4, onSelect = onChange)
+        if (showPresets) ChoiceGrid(BUDGET_PRESETS.map { it to "${it / 10_000}万" }, value, columns = 4, onSelect = onChange)
     }
 }
 

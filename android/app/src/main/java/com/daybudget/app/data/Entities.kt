@@ -31,6 +31,7 @@ data class SettingsEntity(
     @ColumnInfo(name = "weekend_boost_pct", defaultValue = "100") val weekendBoostPct: Int = 100,
     /** 週末の曜日（ISO の番号をカンマ区切り。例: "6,7"） */
     @ColumnInfo(name = "weekend_days", defaultValue = "6,7") val weekendDays: String = "6,7",
+    @ColumnInfo(name = "first_period_budget") val firstPeriodBudget: Int? = null,
 )
 
 /** カテゴリマスタ（設計書 §4 ③） */
