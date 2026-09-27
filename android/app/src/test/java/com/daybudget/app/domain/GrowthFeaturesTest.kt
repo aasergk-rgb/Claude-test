@@ -88,4 +88,25 @@ class GrowthFeaturesTest {
         assertNull(r.topCategory)
         assertEquals(30_000, r.saved)
     }
+
+    @Test fun `昨日予算内なら、今日増えた額が節約ボーナス`() {
+        // 9/1 に 0 円 → 9/2 は 30000/29 = 1034、9/1 は 1000 → +34
+        assertEquals(34, BudgetCalculator.savingsBonus(s, emptyList(), d("2026-09-02")))
+        // 昨日使いすぎたらボーナスなし
+        assertEquals(0, BudgetCalculator.savingsBonus(s, listOf(ex("2026-09-01", 2_000)), d("2026-09-02")))
+        // 月度の初日は昨日がないのでなし
+        assertEquals(0, BudgetCalculator.savingsBonus(s, emptyList(), d("2026-09-01")))
+        // 予約の上乗せはボーナスに数えない
+        // 9/1: (30000-3000)/30 = 900、9/2 の通常分: 27000/29 = 931 → +31（3000 は含めない）
+        assertEquals(31, BudgetCalculator.savingsBonus(s, emptyList(), d("2026-09-02"), listOf(plan("2026-09-02", 3_000))))
+        // 貯金プールではなし
+        assertEquals(0, BudgetCalculator.savingsBonus(s.copy(carryoverMode = CarryoverMode.SAVINGS), emptyList(), d("2026-09-02")))
+    }
+
+    @Test fun `連続日数の節目`() {
+        assertNull(reachedMilestone(2))
+        assertEquals(3, reachedMilestone(3))
+        assertEquals(7, reachedMilestone(9))
+        assertEquals(100, reachedMilestone(150))
+    }
 }

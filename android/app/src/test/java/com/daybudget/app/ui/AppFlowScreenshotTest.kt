@@ -21,6 +21,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.daybudget.app.domain.Period
 import com.daybudget.app.domain.longJa
 import org.junit.Before
+import org.junit.After
 import org.junit.Rule
 import org.robolectric.Shadows.shadowOf
 import java.time.LocalDate
@@ -39,6 +40,9 @@ import org.robolectric.annotation.GraphicsMode
 @Config(qualifiers = "w393dp-h851dp-xxhdpi")
 class AppFlowScreenshotTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
+
+    @After
+    fun resetDatabase() = com.daybudget.app.data.AppDatabase.resetForTests()
 
     @Before
     fun grantNotifications() {
@@ -94,7 +98,7 @@ class AppFlowScreenshotTest {
         rule.onNodeWithText("コーヒー ¥150").performClick()
         waitFor("コーヒー ¥150 を記録しました")
         // 大きな出費を予定に入れる
-        rule.onNodeWithText("＋ 追加").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithText("大きな出費を予定に入れる").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         waitFor("大きな出費を予定に入れる")
         rule.onNode(hasSetTextAction() and hasText("内容（例：飲み会）")).performTextInput("飲み会")
         rule.onNode(hasSetTextAction() and hasText("金額")).performTextInput("5000")

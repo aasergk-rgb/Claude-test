@@ -1,6 +1,10 @@
 package com.daybudget.app.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -88,6 +92,8 @@ fun ExpenseSheet(target: SheetTarget, state: AppState.Ready, viewModel: MainView
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val messenger = LocalMessenger.current
+    val fly = LocalFly.current
+    var amountCenter by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
 
     var digits by rememberSaveable(target) { mutableStateOf(editing?.amount?.toString() ?: "") }
     var categoryId by rememberSaveable(target) { mutableStateOf(editing?.categoryId ?: state.settings.lastCategoryId) }
@@ -96,7 +102,10 @@ fun ExpenseSheet(target: SheetTarget, state: AppState.Ready, viewModel: MainView
     var pickingDate by remember { mutableStateOf(false) }
     val amount = digits.toIntOrNull() ?: 0
 
-    fun close() = scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
+    fun close(after: () -> Unit = {}) = scope.launch { sheetState.hide() }.invokeOnCompletion {
+        onDismiss()
+        after()
+    }
 
     fun submit() {
         if (amount <= 0) return
@@ -110,7 +119,9 @@ fun ExpenseSheet(target: SheetTarget, state: AppState.Ready, viewModel: MainView
             messenger.show("${cat.label} ${formatYen(amount)} を記録しました")
         }
         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-        close()
+        val from = amountCenter
+        // シートが閉じてから、金額を「今日使えるお金」へ飛ばす（今日の記録のときだけ）
+        close { if (editing == null && date == state.today) fly.launch(amount, from) }
     }
 
     fun remove() {
@@ -155,19 +166,18 @@ fun ExpenseSheet(target: SheetTarget, state: AppState.Ready, viewModel: MainView
                 DbIconButton(DbIcons.Close, "閉じる", onClick = { close() }, modifier = Modifier.size(36.dp))
             }
 
-            Text(
-                buildAnnotatedString {
-                    withStyle(SpanStyle(fontSize = 26.sp, color = c.muted)) { append("¥") }
-                    append(formatNumber(amount))
-                },
-                Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                fontFamily = DisplayFamily,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 48.sp,
-                letterSpacing = (-1.5).sp,
-                color = if (amount > 0) c.ink else c.faint,
-            )
+            Row(
+                Modifier.fillMaxWidth().onGloballyPositioned { amountCenter = it.centerInRoot() },
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Text("¥", fontFamily = DisplayFamily, fontWeight = FontWeight.ExtraBold, fontSize = 26.sp, color = c.muted, modifier = Modifier.padding(bottom = 8.dp, end = 2.dp))
+                RollingText(
+                    formatNumber(amount),
+                    TextStyle(fontFamily = DisplayFamily, fontWeight = FontWeight.ExtraBold, fontSize = 48.sp, letterSpacing = (-1.5).sp, color = if (amount > 0) c.ink else c.faint),
+                    increasing = true,
+                )
+            }
 
             CategoryGrid(categoryId) { categoryId = it }
 
@@ -279,11 +289,13 @@ private fun Keypad(onKey: (String) -> Unit) {
                 row.forEach { key ->
                     val interaction = remember { MutableInteractionSource() }
                     val pressed by interaction.collectIsPressedAsState()
+                    // 押すと沈み、離すと弾んで戻る
+                    val keyScale by animateFloatAsState(if (pressed) 0.9f else 1f, spring(dampingRatio = 0.35f, stiffness = 900f), label = "key")
                     Box(
                         Modifier
                             .weight(1f)
                             .height(52.dp)
-                            .scale(if (pressed) 0.95f else 1f)
+                            .scale(keyScale)
                             .clip(RoundedCornerShape(14.dp))
                             .background(if (pressed) c.line else c.surface2)
                             .clickable(interaction, indication = null, role = Role.Button) { onKey(key) }

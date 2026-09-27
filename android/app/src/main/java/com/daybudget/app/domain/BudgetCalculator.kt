@@ -157,6 +157,21 @@ object BudgetCalculator {
         return streak
     }
 
+    /**
+     * 昨日予算内で終えたおかげで、今日の割当が昨日より増えた額（均等配分モードのみ）。
+     * 予約した出費の上乗せ分は除く。増えていなければ 0。
+     */
+    fun savingsBonus(settings: UserSettings, expenses: List<Expense>, today: LocalDate, planned: List<PlannedExpense> = emptyList()): Int {
+        if (settings.carryoverMode != CarryoverMode.DISTRIBUTE) return 0
+        val period = Period.of(today, settings.closingDay)
+        val days = simulatePeriod(period, settings, expenses, today, planned)
+        val yesterday = days.firstOrNull { it.date == today.minusDays(1) } ?: return 0
+        if (yesterday.state != DayState.UNDER) return 0
+        val todayDay = days.first { it.date == today }
+        fun reserved(d: LocalDate) = planned.filter { it.date == d }.sumOf { it.amount }
+        return maxOf(0, (todayDay.budget - reserved(today)) - (yesterday.budget - reserved(yesterday.date)))
+    }
+
     fun recap(period: Period, settings: UserSettings, expenses: List<Expense>, today: LocalDate, planned: List<PlannedExpense> = emptyList()): PeriodRecap {
         val range = activeRange(period, settings.monthlyBudget, settings.startDate)
         val days = simulatePeriod(period, settings, expenses, today, planned)

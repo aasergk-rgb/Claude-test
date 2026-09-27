@@ -56,6 +56,10 @@ import com.daybudget.app.ui.AppState
 import com.daybudget.app.ui.LocalMessenger
 import com.daybudget.app.ui.MainViewModel
 import com.daybudget.app.ui.components.PlannedSheet
+import com.daybudget.app.ui.components.SwipeableExpense
+import com.daybudget.app.domain.Categories
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.daybudget.app.ui.components.DbIconButton
 import com.daybudget.app.ui.components.EmptyBox
 import com.daybudget.app.ui.components.Panel
@@ -112,6 +116,8 @@ fun HistoryScreen(
     val hasOlder = settings.startDate?.isBefore(period.start) == true
     val hasLaterPlans = state.planned.any { it.date.isAfter(period.end) }
     var addingPlan by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val messenger = LocalMessenger.current
 
     LazyColumn(
         Modifier.fillMaxSize().statusBarsPadding(),
@@ -219,15 +225,31 @@ fun HistoryScreen(
             if (dayPlans.isEmpty()) item { EmptyBox("この日の予定はありません") }
         } else if (dayItems.isEmpty()) item { EmptyBox("この日の支出はありません") }
         items(dayItems, key = { it.id }) { e ->
-            ExpenseItem(
-                e,
-                subtitle = e.memo ?: " ",
-                onClick = { openSheet(SheetTarget.Edit(e)) },
-                actionIcon = DbIcons.Right,
-                actionDescription = "編集",
-                onAction = { openSheet(SheetTarget.Edit(e)) },
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
+            SwipeableExpense(
+                onDelete = {
+                    scope.launch {
+                        viewModel.deleteExpense(e.id)?.let { removed ->
+                            messenger.show("${Categories.of(removed.categoryId).label} ${formatYen(removed.amount)} を削除しました", "元に戻す") {
+                                viewModel.restoreExpense(removed)
+                            }
+                        }
+                    }
+                },
+                onDuplicate = {
+                    viewModel.addExpense(e.amount, e.categoryId, e.memo, state.today)
+                    messenger.show("今日の支出として ${formatYen(e.amount)} を記録しました")
+                },
+                modifier = Modifier.animateItem().padding(bottom = 8.dp),
+            ) {
+                ExpenseItem(
+                    e,
+                    subtitle = e.memo ?: " ",
+                    onClick = { openSheet(SheetTarget.Edit(e)) },
+                    actionIcon = DbIcons.Right,
+                    actionDescription = "編集",
+                    onAction = { openSheet(SheetTarget.Edit(e)) },
+                )
+            }
         }
         item {
             Row(
@@ -246,7 +268,6 @@ fun HistoryScreen(
     }
 
     if (addingPlan) {
-        val messenger = LocalMessenger.current
         PlannedSheet(state.today, initialDate = sel, onDismiss = { addingPlan = false }) { label, amount, date ->
             viewModel.addPlanned(label, amount, date)
             messenger.show("${date.md()}の「$label」を予定に入れました")

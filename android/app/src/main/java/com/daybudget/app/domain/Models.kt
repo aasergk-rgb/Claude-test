@@ -111,3 +111,9 @@ data class OnboardingChoices(
     val morningNotify: Boolean,
     val eveningNotify: Boolean,
 )
+
+/** お祝いする連続日数の節目 */
+val STREAK_MILESTONES = listOf(3, 7, 14, 30, 60, 100)
+
+/** 今の連続日数で到達している一番大きな節目（なければ null） */
+fun reachedMilestone(streak: Int): Int? = STREAK_MILESTONES.lastOrNull { it <= streak }

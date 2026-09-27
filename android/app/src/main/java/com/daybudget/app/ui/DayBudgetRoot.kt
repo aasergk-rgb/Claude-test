@@ -36,6 +36,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.daybudget.app.ui.components.ExpenseSheet
+import com.daybudget.app.ui.components.FlightsOverlay
+import com.daybudget.app.ui.components.FlyController
+import com.daybudget.app.ui.components.LocalFly
 import com.daybudget.app.ui.components.SheetTarget
 import com.daybudget.app.ui.screens.DashboardScreen
 import com.daybudget.app.ui.screens.HistoryScreen
@@ -83,6 +86,7 @@ fun DayBudgetRoot(viewModel: MainViewModel, requestedRoute: MutableStateFlow<Str
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val messenger = remember { Messenger(snackbar, scope) }
+    val fly = remember { FlyController() }
     var sheet by remember { mutableStateOf<SheetTarget?>(null) }
 
     val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
@@ -95,7 +99,7 @@ fun DayBudgetRoot(viewModel: MainViewModel, requestedRoute: MutableStateFlow<Str
             val style = if (dark) SystemBarStyle.dark(Color.TRANSPARENT) else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
             activity?.enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
         }
-        CompositionLocalProvider(LocalMessenger provides messenger) {
+        CompositionLocalProvider(LocalMessenger provides messenger, LocalFly provides fly) {
             Box(Modifier.fillMaxSize().background(Db.colors.appBg)) {
                 if (!ready.settings.onboarded) {
                     OnboardingScreen(ready.today) { choices, openPaywall ->
@@ -140,6 +144,8 @@ fun DayBudgetRoot(viewModel: MainViewModel, requestedRoute: MutableStateFlow<Str
                 sheet?.let { target ->
                     ExpenseSheet(target, ready, viewModel, onDismiss = { sheet = null })
                 }
+
+                FlightsOverlay(fly)
 
                 SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 92.dp)) { data ->
                     Snackbar(

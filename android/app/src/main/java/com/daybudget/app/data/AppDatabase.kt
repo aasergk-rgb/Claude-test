@@ -19,6 +19,13 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         @Volatile private var instance: AppDatabase? = null
 
+        /** テスト用: テストごとに新しいデータベースを使う */
+        @androidx.annotation.VisibleForTesting
+        fun resetForTests() = synchronized(this) {
+            instance?.close()
+            instance = null
+        }
+
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "daybudget.db")
                 .build()

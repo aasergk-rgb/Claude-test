@@ -1,6 +1,34 @@
 package com.daybudget.app.ui.screens
 
 import android.Manifest
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.style.TextAlign
+import com.daybudget.app.domain.reachedMilestone
+import com.daybudget.app.ui.UiPrefs
+import com.daybudget.app.ui.components.LocalFly
+import com.daybudget.app.ui.components.MilestoneCelebration
+import com.daybudget.app.ui.components.RollingText
+import com.daybudget.app.ui.components.SwipeableExpense
+import com.daybudget.app.ui.components.centerInRoot
+import com.daybudget.app.ui.rememberReduceMotion
+import kotlinx.coroutines.delay
+import kotlin.math.PI
+import kotlin.math.sin
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -96,12 +124,20 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
     val c = Db.colors
     val scope = rememberCoroutineScope()
     val messenger = LocalMessenger.current
+    val fly = LocalFly.current
+    val context = LocalContext.current
+    val prefs = remember { UiPrefs(context) }
+    val reduce = rememberReduceMotion()
+    val haptics = LocalHapticFeedback.current
+
     val snap = remember(state) { BudgetCalculator.computeToday(state.settings, state.expenses, state.today, state.planned) }
     val days = remember(state) { BudgetCalculator.simulatePeriod(snap.period, state.settings, state.expenses, state.today, state.planned) }
     val streak = remember(state) { BudgetCalculator.underBudgetStreak(state.settings, state.expenses, state.today, state.planned) }
     val upcoming = remember(state) { state.planned.filter { !it.date.isBefore(state.today) }.sortedBy { it.date } }
+    val todays = remember(state) { state.expenses.filter { it.date == state.today }.sortedByDescending { it.createdAt } }
     var addingPlan by remember { mutableStateOf(false) }
-    val context = LocalContext.current
+    var plansOpen by remember { mutableStateOf(prefs.plansExpanded) }
+
     fun onNotifyAnswer(granted: Boolean) {
         if (granted) {
             viewModel.updateSettings { it.copy(morningNotify = true, eveningNotify = true, notifyPromptDismissed = true) }
@@ -121,12 +157,48 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
             navigate(Routes.recap(prev.end))
         }
     }
-    val todays = remember(state) { state.expenses.filter { it.date == state.today }.sortedByDescending { it.createdAt } }
 
-    val haptics = LocalHapticFeedback.current
-    val statusColor by animateColorAsState(c.status(snap.status), label = "status")
-    val shown by animateIntAsState(snap.todayAvailable, tween(520), label = "amount")
-    val progress by animateFloatAsState(snap.progressRate.toFloat().coerceIn(0f, 1f), tween(500), label = "meter")
+    // ── 節約ボーナスの演出（その日最初に開いたとき一度だけ） ──
+    var heldBonus by remember { mutableIntStateOf(0) }
+    var earnedBonus by remember { mutableIntStateOf(0) }
+    val coinProgress = remember { Animatable(0f) }
+    var coinFrom by remember { mutableStateOf<Offset?>(null) }
+    LaunchedEffect(state.today) {
+        val bonus = BudgetCalculator.savingsBonus(state.settings, state.expenses, state.today, state.planned)
+        if (bonus <= 0 || prefs.bonusShownDate == state.today.toString()) return@LaunchedEffect
+        prefs.bonusShownDate = state.today.toString()
+        earnedBonus = bonus
+        if (reduce) return@LaunchedEffect
+        heldBonus = bonus
+        coinProgress.snapTo(0f)
+        delay(900)
+        coinProgress.animateTo(1f, tween(650, easing = FastOutSlowInEasing))
+        heldBonus = 0
+        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+    }
+
+    // ── 連続日数の節目のお祝い ──
+    var celebrate by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(streak, state.today) {
+        val m = reachedMilestone(streak) ?: return@LaunchedEffect
+        val key = "${state.today.minusDays(streak.toLong())}:$m"
+        if (prefs.celebratedStreak != key) {
+            prefs.celebratedStreak = key
+            delay(if (earnedBonus > 0) 2200 else 400)
+            celebrate = m
+        }
+    }
+
+    // 記録が着地したら大きな数字を少し弾ませる
+    val bump = remember { Animatable(1f) }
+    LaunchedEffect(fly.landings) {
+        if (fly.landings == 0L || reduce) return@LaunchedEffect
+        bump.snapTo(0.93f)
+        bump.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = 500f))
+    }
+
+    val statusColor by animateColorAsState(c.status(snap.status), tween(400), label = "status")
+    val progress by animateFloatAsState(snap.progressRate.toFloat().coerceIn(0f, 1f), spring(dampingRatio = 0.8f, stiffness = 120f), label = "meter")
     val alarming = snap.status == Status.WARNING || snap.status == Status.OVER
 
     fun delete(e: Expense) = scope.launch {
@@ -137,7 +209,19 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
         }
     }
 
+    fun duplicate(e: Expense) {
+        viewModel.addExpense(e.amount, e.categoryId, e.memo, state.today)
+        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+        fly.launch(e.amount, null)
+        messenger.show("${e.memo ?: Categories.of(e.categoryId).label} ${formatYen(e.amount)} をもう一度記録しました")
+    }
+
     Box(Modifier.fillMaxSize()) {
+        // 状態の色を上部にうっすら敷く
+        Box(
+            Modifier.fillMaxWidth().height(360.dp)
+                .background(Brush.verticalGradient(listOf(statusColor.copy(alpha = if (c.isDark) 0.16f else 0.10f), Color.Transparent))),
+        )
         LazyColumn(
             Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 140.dp),
@@ -153,10 +237,46 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
             item {
                 Column(Modifier.fillMaxWidth().padding(top = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("今日使えるお金", color = c.muted, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
-                    BigAmount(shown, if (alarming) statusColor else c.ink, modifier = Modifier.padding(vertical = 4.dp))
+                    BigAmount(
+                        snap.todayAvailable - heldBonus,
+                        if (alarming) statusColor else c.ink,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                            .graphicsLayer { scaleX = bump.value; scaleY = bump.value }
+                            .onGloballyPositioned { fly.heroCenter = it.centerInRoot() },
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         StatusChip(snap.status.label, statusColor)
-                        if (streak >= 2) StatusChip("予算内 ${streak}日連続", c.accentInk.takeIf { !c.isDark } ?: c.accent)
+                        if (streak >= 2) StatusChip("予算内 ${streak}日連続", if (c.isDark) c.accent else c.accentInk)
+                    }
+                    // 節約ボーナスのコイン: 表示 → 大きな数字へ飛び込む → 「+¥◯ 昨日の節約」として残る
+                    AnimatedVisibility(earnedBonus > 0, enter = fadeIn() + expandVertically(), exit = fadeOut()) {
+                        Box(Modifier.padding(top = 12.dp)) {
+                            val p = coinProgress.value
+                            val hero = fly.heroCenter
+                            val from = coinFrom
+                            val landed = heldBonus == 0
+                            Text(
+                                if (landed) "昨日の節約で +${formatYen(earnedBonus)}" else "+${formatYen(earnedBonus)} 昨日の節約ぶん",
+                                Modifier
+                                    .onGloballyPositioned { if (coinFrom == null) coinFrom = it.centerInRoot() }
+                                    .graphicsLayer {
+                                        if (!landed && hero != null && from != null) {
+                                            translationX = (hero.x - from.x) * p
+                                            translationY = (hero.y - from.y) * p - sin(p * PI).toFloat() * 120f
+                                            val sc = 1f - 0.5f * p
+                                            scaleX = sc
+                                            scaleY = sc
+                                            alpha = if (p < 0.8f) 1f else (1f - p) / 0.2f
+                                        }
+                                    }
+                                    .clip(RoundedCornerShape(99.dp))
+                                    .background(if (landed) c.great.copy(alpha = 0.14f) else c.accent)
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                color = if (landed) c.great else c.accentInk,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
                     }
                 }
             }
@@ -184,7 +304,7 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(label, color = c.muted, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                    Text(formatYen(value), color = c.great, fontSize = 14.sp, style = MonoStyle)
+                    RollingText(formatYen(value), MonoStyle.copy(color = c.great, fontSize = 14.sp), increasing = true)
                 }
             }
             if (state.presets.isNotEmpty()) item {
@@ -192,10 +312,16 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
                     SectionHeader("よく使う（タップで記録）", trailing = null)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(state.presets, key = { it.id }) { p ->
-                            QuickChip("${p.label} ${formatYen(p.amount)}", Categories.of(p.categoryId)) {
+                            var chipCenter by remember { mutableStateOf<Offset?>(null) }
+                            QuickChip(
+                                "${p.label} ${formatYen(p.amount)}",
+                                Categories.of(p.categoryId),
+                                Modifier.onGloballyPositioned { chipCenter = it.centerInRoot() },
+                            ) {
                                 scope.launch {
                                     viewModel.quickAdd(p.id)?.let { added ->
                                         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                                        fly.launch(added.amount, chipCenter)
                                         messenger.show("${p.label} ${formatYen(added.amount)} を記録しました", "元に戻す") {
                                             scope.launch { viewModel.deleteExpense(added.id) }
                                         }
@@ -231,14 +357,18 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
             item {
                 Column(Modifier.padding(top = 22.dp)) {
                     SectionHeader("${snap.period.name}の歩み", trailing = "残り ${formatYen(snap.periodRemaining)}")
-                    Row(Modifier.fillMaxWidth().height(22.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.Bottom) {
+                    Row(
+                        Modifier.fillMaxWidth().height(22.dp).clip(RoundedCornerShape(4.dp)).clickable { navigate(Routes.HISTORY) },
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
                         days.forEach { d ->
                             val (h, color) = when (d.state) {
                                 DayState.TODAY -> 22.dp to c.accent
                                 DayState.UNDER -> 12.dp to c.great.copy(alpha = 0.75f)
                                 DayState.OVER -> 12.dp to c.over.copy(alpha = 0.8f)
                                 DayState.INACTIVE -> 12.dp to c.line.copy(alpha = 0.4f)
-                                DayState.FUTURE -> 12.dp to c.line
+                                DayState.FUTURE -> 12.dp to if (state.planned.any { it.date == d.date }) c.accent.copy(alpha = 0.45f) else c.line
                             }
                             Box(Modifier.weight(1f).height(h).clip(RoundedCornerShape(2.dp)).background(color))
                         }
@@ -250,41 +380,68 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
                     }
                 }
             }
-            if (state.settings.carryoverMode == CarryoverMode.DISTRIBUTE) {
-                item {
-                    Row(Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("予定している大きな出費", color = c.muted, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        Text("＋ 追加", Modifier.clip(RoundedCornerShape(8.dp)).clickable { addingPlan = true }.padding(horizontal = 8.dp, vertical = 4.dp), color = c.healthy, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    }
-                    if (upcoming.isEmpty()) {
-                        Text("飲み会や旅行など、先の大きな出費を入れておくと、その日まで少しずつ取り分けます。", color = c.faint, fontSize = 12.sp, lineHeight = 18.sp)
-                    }
-                }
-                items(upcoming, key = { it.id }) { p ->
+            if (state.settings.carryoverMode == CarryoverMode.DISTRIBUTE) item {
+                // 予定は1行にまとめ、タップで開く
+                Column(Modifier.padding(top = 14.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(14.dp))) {
                     Row(
-                        Modifier.animateItem().padding(bottom = 6.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.surface)
-                            .border(1.dp, c.line, RoundedCornerShape(12.dp)).padding(start = 14.dp, end = 2.dp, top = 4.dp, bottom = 4.dp),
+                        Modifier.fillMaxWidth().clickable {
+                            if (upcoming.isEmpty()) addingPlan = true else { plansOpen = !plansOpen; prefs.plansExpanded = plansOpen }
+                        }.padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(if (p.date == state.today) "今日" else p.date.md(), color = c.muted, fontSize = 12.sp, style = MonoStyle, modifier = Modifier.width(48.dp))
-                        Text(p.label, color = c.ink, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(formatYen(p.amount), color = c.ink, fontSize = 14.sp, style = MonoStyle)
-                        DbIconButton(DbIcons.Close, "予定を削除", onClick = { viewModel.deletePlanned(p.id) }, tint = c.faint, modifier = Modifier.size(40.dp))
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(c.accent))
+                        Spacer(Modifier.width(10.dp))
+                        if (upcoming.isEmpty()) {
+                            Text("大きな出費を予定に入れる", color = c.ink, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            Icon(DbIcons.Plus, null, tint = c.muted, modifier = Modifier.size(18.dp))
+                        } else {
+                            Text("予定 ${upcoming.size}件", color = c.ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(" · ${formatYen(upcoming.sumOf { it.amount })} を取り分け中", color = c.muted, fontSize = 13.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            val rot by animateFloatAsState(if (plansOpen) 90f else 0f, label = "chevron")
+                            Icon(DbIcons.Right, if (plansOpen) "閉じる" else "開く", tint = c.muted, modifier = Modifier.size(18.dp).graphicsLayer { rotationZ = rot })
+                        }
+                    }
+                    AnimatedVisibility(plansOpen && upcoming.isNotEmpty(), enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+                        Column {
+                            upcoming.forEach { p ->
+                                HorizontalDivider(color = c.line)
+                                Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 2.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(if (p.date == state.today) "今日" else p.date.md(), color = c.muted, fontSize = 12.sp, style = MonoStyle, modifier = Modifier.width(48.dp))
+                                    Text(p.label, color = c.ink, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(formatYen(p.amount), color = c.ink, fontSize = 14.sp, style = MonoStyle)
+                                    DbIconButton(DbIcons.Close, "予定を削除", onClick = { viewModel.deletePlanned(p.id) }, tint = c.faint, modifier = Modifier.size(40.dp))
+                                }
+                            }
+                            HorizontalDivider(color = c.line)
+                            Text(
+                                "＋ 予定を追加",
+                                Modifier.fillMaxWidth().clickable { addingPlan = true }.padding(14.dp),
+                                color = c.healthy, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                            )
+                        }
                     }
                 }
             }
             item { SectionHeader("今日の支出", Modifier.padding(top = 24.dp), trailing = "${todays.size}件") }
             if (todays.isEmpty()) item { EmptyBox("今日はまだ記録がありません") }
             items(todays, key = { it.id }) { e ->
-                ExpenseItem(
-                    e,
-                    subtitle = e.createdAt.atZone(ZoneId.systemDefault()).format(timeFormat) + (e.memo?.let { " · $it" } ?: ""),
-                    onClick = { openSheet(SheetTarget.Edit(e)) },
-                    actionIcon = DbIcons.Trash,
-                    actionDescription = "削除",
-                    onAction = { delete(e) },
+                SwipeableExpense(
+                    onDelete = { delete(e) },
+                    onDuplicate = { duplicate(e) },
                     modifier = Modifier.animateItem().padding(bottom = 8.dp),
-                )
+                ) {
+                    ExpenseItem(
+                        e,
+                        subtitle = e.createdAt.atZone(ZoneId.systemDefault()).format(timeFormat) + (e.memo?.let { " · $it" } ?: ""),
+                        onClick = { openSheet(SheetTarget.Edit(e)) },
+                        actionIcon = DbIcons.Trash,
+                        actionDescription = "削除",
+                        onAction = { delete(e) },
+                    )
+                }
+            }
+            if (todays.isNotEmpty()) item {
+                Text("左にスワイプで削除、右にスワイプでもう一度記録", color = c.faint, fontSize = 11.sp, modifier = Modifier.fillMaxWidth().padding(top = 2.dp), textAlign = TextAlign.Center)
             }
         }
 
@@ -296,22 +453,29 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
         ) {
             PrimaryButton("支出を記録", onClick = { openSheet(SheetTarget.Add(state.today)) }, icon = DbIcons.Plus)
         }
+
+        celebrate?.let { m -> MilestoneCelebration(m) { celebrate = null } }
     }
 
     if (addingPlan) {
         PlannedSheet(state.today, onDismiss = { addingPlan = false }) { label, amount, date ->
             viewModel.addPlanned(label, amount, date)
+            plansOpen = true
+            prefs.plansExpanded = true
             messenger.show("${date.md()}の「$label」を予定に入れました")
         }
     }
 }
 
 @Composable
-private fun QuickChip(text: String, category: Categories?, onClick: () -> Unit) {
+private fun QuickChip(text: String, category: Categories?, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val c = Db.colors
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.92f else 1f, spring(dampingRatio = 0.4f, stiffness = 700f), label = "chip")
     Row(
-        Modifier.clip(RoundedCornerShape(99.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(99.dp))
-            .clickable(role = Role.Button, onClick = onClick).padding(start = if (category != null) 6.dp else 14.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
+        modifier.graphicsLayer { scaleX = scale; scaleY = scale }.clip(RoundedCornerShape(99.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(99.dp))
+            .clickable(interaction, indication = null, role = Role.Button, onClick = onClick).padding(start = if (category != null) 6.dp else 14.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
