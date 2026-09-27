@@ -123,6 +123,7 @@ fun PresetSheet(onDismiss: () -> Unit, onSave: (label: String, amount: Int, cate
                             Text(c.label, color = Db.colors.ink, fontSize = 11.sp, fontWeight = FontWeight.Bold, lineHeight = 13.sp)
                         }
                     }
+                    repeat(3 - row.size) { androidx.compose.foundation.layout.Spacer(Modifier.weight(1f)) }
                 }
             }
         }
@@ -177,5 +178,45 @@ fun PlannedSheet(
             },
             dismissButton = { TextButton(onClick = { picking = false }) { Text("キャンセル") } },
         ) { DatePicker(picker, showModeToggle = false) }
+    }
+}
+
+/** 毎月の決まった出費を追加する */
+@Composable
+fun RecurringSheet(today: LocalDate, onDismiss: () -> Unit, onSave: (label: String, amount: Int, day: Int, categoryId: String) -> Unit) {
+    var label by rememberSaveable { mutableStateOf("") }
+    var amount by rememberSaveable { mutableIntStateOf(0) }
+    var day by rememberSaveable { mutableIntStateOf(25) }
+    var cat by rememberSaveable { mutableStateOf(Categories.FUN.id) }
+    val next = com.daybudget.app.domain.RecurringExpense("", "", 0, day, cat, com.daybudget.app.domain.RecurringExpense.firstStart(today))
+        .occurrences(today, today.plusMonths(2)).firstOrNull()
+    FormSheet("毎月の決まった出費を追加", onDismiss, canSave = label.isNotBlank() && amount > 0, onSave = { onSave(label.trim(), amount, day, cat) }) {
+        Text("サブスクや美容院など。支払日までは毎日の予算から取り分け、当日に自動で記録します。", color = Db.colors.muted, fontSize = 12.sp, lineHeight = 18.sp)
+        LabelField(label, { label = it }, "名前（例：Netflix）")
+        AmountField(amount, { amount = it })
+        Text("毎月の支払日", color = Db.colors.muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        ClosingDayPicker(day, showAll = true) { day = it }
+        if (next != null) Text("次は ${next.longJa()} に記録します", color = Db.colors.muted, fontSize = 12.sp)
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Categories.entries.chunked(3).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { c ->
+                        val on = c.id == cat
+                        Row(
+                            Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
+                                .background(if (on) Color(c.color).copy(alpha = 0.09f) else Color.Transparent)
+                                .border(1.5.dp, if (on) Color(c.color) else Db.colors.line, RoundedCornerShape(12.dp))
+                                .clickable(role = Role.RadioButton) { cat = c.id }.padding(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            CategoryIcon(c, 26.dp)
+                            Text(c.label, color = Db.colors.ink, fontSize = 11.sp, fontWeight = FontWeight.Bold, lineHeight = 13.sp)
+                        }
+                    }
+                    repeat(3 - row.size) { androidx.compose.foundation.layout.Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
     }
 }

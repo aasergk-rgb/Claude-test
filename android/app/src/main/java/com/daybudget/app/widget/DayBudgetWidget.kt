@@ -117,11 +117,13 @@ class DayBudgetWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repo = (context.applicationContext as DayBudgetApp).repository
-        val initial = WidgetData.from(repo.loadSettings(), repo.loadExpenses(), LocalDate.now(), repo.loadPresets(), repo.loadPlanned())
+        repo.loadCategories()
+        val initial = WidgetData.from(repo.loadSettings(), repo.loadExpenses(), LocalDate.now(), repo.loadPresets(), repo.loadAllPlanned(LocalDate.now()))
         // ウィジェットの表示中はデータベースの変化を直接受け取って描き直す。
         // （最初に1回読むだけだと、表示中の更新で古い値が出たままになる）
-        val updates = combine(repo.settings, repo.expenses, repo.presets, repo.planned) { s, e, p, pl ->
-            WidgetData.from(s, e, LocalDate.now(), p, pl)
+        val updates = combine(repo.settings, repo.expenses, repo.presets, repo.planned, repo.recurring) { s, e, p, pl, rec ->
+            val today = LocalDate.now()
+            WidgetData.from(s, e, today, p, pl + rec.flatMap { it.asPlanned(today.minusYears(1), today.plusYears(1)) })
         }
         provideContent {
             val data by updates.collectAsState(initial)

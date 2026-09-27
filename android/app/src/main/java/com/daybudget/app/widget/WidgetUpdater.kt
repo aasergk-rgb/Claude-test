@@ -56,6 +56,7 @@ class MidnightReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             try {
+                (context.applicationContext as com.daybudget.app.DayBudgetApp).repository.materializeRecurring(java.time.LocalDate.now())
                 WidgetUpdater.updateAll(context)
                 WidgetUpdater.scheduleMidnightRefresh(context)
             } finally {

@@ -58,6 +58,7 @@ import com.daybudget.app.ui.MainViewModel
 import com.daybudget.app.ui.components.PlannedSheet
 import com.daybudget.app.ui.components.SwipeableExpense
 import com.daybudget.app.domain.Categories
+import com.daybudget.app.domain.isRecurring
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import com.daybudget.app.ui.components.DbIconButton
@@ -147,6 +148,38 @@ fun HistoryScreen(
                 }
             }
         }
+        val totals = BudgetCalculator.categoryTotals(state.expenses, range.from, minOf(period.end, state.today))
+        if (totals.isNotEmpty()) item {
+            val sum = totals.sumOf { it.second }.coerceAtLeast(1)
+            var showAll by remember { mutableStateOf(false) }
+            Panel(Modifier.padding(bottom = 18.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("カテゴリ別", color = c.muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    // 1本の横棒をカテゴリの割合で塗り分ける
+                    Row(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(99.dp)), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        totals.forEach { (cat, amount) ->
+                            Box(Modifier.weight(amount.toFloat().coerceAtLeast(1f)).fillMaxSize().background(Color(cat.color)))
+                        }
+                    }
+                    (if (showAll) totals else totals.take(4)).forEach { (cat, amount) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(8.dp).clip(CircleShape).background(Color(cat.color)))
+                            Spacer(Modifier.width(8.dp))
+                            Text(cat.label, color = c.ink, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            Text("${amount * 100 / sum}%", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(end = 10.dp))
+                            Text(formatYen(amount), color = c.ink, fontSize = 13.sp, style = MonoStyle)
+                        }
+                    }
+                    if (totals.size > 4) {
+                        Text(
+                            if (showAll) "閉じる" else "ほか${totals.size - 4}件を見る",
+                            Modifier.clip(RoundedCornerShape(8.dp)).clickable { showAll = !showAll }.padding(vertical = 2.dp),
+                            color = c.healthy, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+        }
         if (period.end.isBefore(state.today)) item {
             Row(
                 Modifier.padding(bottom = 16.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.ink)
@@ -218,7 +251,11 @@ fun HistoryScreen(
                 Spacer(Modifier.width(10.dp))
                 Text(p.label, color = c.ink, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1)
                 Text(formatYen(p.amount), color = c.ink, fontSize = 15.sp, style = MonoStyle)
-                DbIconButton(DbIcons.Close, "予定を削除", onClick = { viewModel.deletePlanned(p.id) }, tint = c.muted, modifier = Modifier.size(40.dp))
+                if (p.isRecurring) {
+                    Text("毎月", color = c.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp))
+                } else {
+                    DbIconButton(DbIcons.Close, "予定を削除", onClick = { viewModel.deletePlanned(p.id) }, tint = c.muted, modifier = Modifier.size(40.dp))
+                }
             }
         }
         if (selIsFuture) {
@@ -325,7 +362,7 @@ private fun DayCell(d: DaySummary, isFirst: Boolean, today: LocalDate, selected:
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(label, color = if (selected) c.appBg else c.ink, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(label, color = if (selected) c.appBg else c.ink, fontSize = 12.sp, lineHeight = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         val amountText = when {
             off -> ""
             future -> if (planned > 0) formatNumber(planned) else ""
@@ -336,7 +373,7 @@ private fun DayCell(d: DaySummary, isFirst: Boolean, today: LocalDate, selected:
             future && planned > 0 -> if (c.isDark) c.accent else c.warning
             else -> c.muted
         }
-        Text(amountText, color = amountColor, fontSize = 9.5.sp, fontFamily = MonoFamily, maxLines = 1, letterSpacing = (-0.3).sp)
+        Text(amountText, color = amountColor, fontSize = 9.5.sp, lineHeight = 10.sp, fontFamily = MonoFamily, maxLines = 1, letterSpacing = (-0.3).sp)
         val dot = when (d.state) {
             DayState.UNDER -> c.great
             DayState.OVER -> c.over

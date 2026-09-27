@@ -2,7 +2,9 @@ package com.daybudget.app.data
 
 import com.daybudget.app.domain.AppTheme
 import com.daybudget.app.domain.CarryoverMode
+import com.daybudget.app.domain.Category
 import com.daybudget.app.domain.Expense
+import com.daybudget.app.domain.RecurringExpense
 import com.daybudget.app.domain.PlannedExpense
 import com.daybudget.app.domain.QuickPreset
 import com.daybudget.app.domain.UserSettings
@@ -27,6 +29,8 @@ fun SettingsEntity.toDomain() = UserSettings(
     notifyPromptDismissed = notifyPromptDismissed,
     lastRecapEnd = lastRecapEnd?.let(LocalDate::parse),
     presetsSeeded = presetsSeeded,
+    weekendBoostPct = weekendBoostPct,
+    weekendDays = weekendDays.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet(),
 )
 
 fun UserSettings.toEntity(createdAt: String, updatedAt: String) = SettingsEntity(
@@ -48,7 +52,17 @@ fun UserSettings.toEntity(createdAt: String, updatedAt: String) = SettingsEntity
     notifyPromptDismissed = notifyPromptDismissed,
     lastRecapEnd = lastRecapEnd?.toString(),
     presetsSeeded = presetsSeeded,
+    weekendBoostPct = weekendBoostPct,
+    weekendDays = weekendDays.sorted().joinToString(","),
 )
+
+fun CategoryEntity.toDomain() = Category(id, name, color, icon, order, hidden, builtIn)
+
+fun Category.toEntity() = CategoryEntity(id, label, icon, color, order, hidden, builtIn)
+
+fun RecurringEntity.toDomain() = RecurringExpense(id, label, amount, dayOfMonth, categoryId, LocalDate.parse(startDate), lastRecorded?.let(LocalDate::parse))
+
+fun RecurringExpense.toEntity() = RecurringEntity(id, label, amount, dayOfMonth, categoryId, startDate.toString(), lastRecorded?.toString())
 
 fun PresetEntity.toDomain() = QuickPreset(id, label, amount, categoryId, order)
 

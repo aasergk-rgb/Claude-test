@@ -33,6 +33,7 @@ import com.daybudget.app.domain.Categories
 import com.daybudget.app.notify.DailyNotifications
 import com.daybudget.app.ui.components.CategoryIcon
 import com.daybudget.app.ui.components.PresetSheet
+import com.daybudget.app.ui.components.RecurringSheet
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -112,6 +113,7 @@ fun SettingsScreen(state: AppState.Ready, viewModel: MainViewModel, onBack: () -
     var draft by remember { mutableIntStateOf(0) }
     var confirmReset by remember { mutableStateOf(false) }
     var addingPreset by remember { mutableStateOf(false) }
+    var addingRecurring by remember { mutableStateOf(false) }
     var pickingTime by remember { mutableStateOf<NotifyKind?>(null) }
     var pendingImport by remember { mutableStateOf<String?>(null) }
     var pendingNotify by remember { mutableStateOf<NotifyKind?>(null) }
@@ -210,6 +212,61 @@ fun SettingsScreen(state: AppState.Ready, viewModel: MainViewModel, onBack: () -
                 )
                 Text(MODE_HELP.getValue(s.carryoverMode), color = c.muted, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 8.dp, start = 2.dp))
             }
+        }
+
+        Group("週末ブースト") {
+            Column(Modifier.padding(14.dp)) {
+                SegmentedControl(
+                    listOf(100 to "なし", 125 to "1.25倍", 150 to "1.5倍", 200 to "2倍"),
+                    s.weekendBoostPct,
+                    onSelect = { v -> viewModel.updateSettings { it.copy(weekendBoostPct = v) } },
+                )
+                if (s.weekendBoostPct > 100) {
+                    Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(5 to "金", 6 to "土", 7 to "日").forEach { (d, label) ->
+                            val on = d in s.weekendDays
+                            Box(
+                                Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(if (on) c.ink else c.surface2)
+                                    .clickable(role = Role.Checkbox) {
+                                        val next = if (on) s.weekendDays - d else s.weekendDays + d
+                                        if (next.isNotEmpty()) viewModel.updateSettings { it.copy(weekendDays = next) }
+                                    }.padding(vertical = 9.dp),
+                                contentAlignment = Alignment.Center,
+                            ) { Text(label, color = if (on) c.appBg else c.muted, fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+                        }
+                    }
+                    val p = Period.of(state.today, s.closingDay)
+                    val weekend = p.dates().count { it.dayOfWeek.value in s.weekendDays }
+                    val unit = s.monthlyBudget.toDouble() / (p.days - weekend + weekend * s.weekendBoostPct / 100.0)
+                    Text(
+                        "この月度なら 平日 約${formatYen(unit.toInt())}・週末 約${formatYen((unit * s.weekendBoostPct / 100).toInt())}（使い方で毎日変わります）",
+                        color = c.muted, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 10.dp, start = 2.dp),
+                    )
+                } else {
+                    Text("週末に多めに使う人向け。週末の予算を平日より多く割り当てます。", color = c.muted, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 8.dp, start = 2.dp))
+                }
+            }
+        }
+
+        Group("毎月の決まった出費") {
+            state.recurring.forEach { r ->
+                Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CategoryIcon(Categories.of(r.categoryId), 30.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(r.label, color = c.ink, fontSize = 14.sp)
+                        Text("毎月${closingLabel(r.dayOfMonth)}", color = c.muted, fontSize = 12.sp)
+                    }
+                    Text(formatYen(r.amount), color = c.muted, style = MonoStyle, fontSize = 13.sp)
+                    DbIconButton(DbIcons.Trash, "${r.label}を削除", onClick = { viewModel.deleteRecurring(r.id) }, tint = c.faint, modifier = Modifier.size(40.dp))
+                }
+                HorizontalDivider(color = c.line)
+            }
+            Item("＋ 追加する", null) { addingRecurring = true }
+        }
+
+        Group("カテゴリ") {
+            Item("カテゴリを編集", "${Categories.entries.size}個") { navigate(Routes.CATEGORIES) }
         }
 
         Group("お知らせ") {
@@ -326,6 +383,13 @@ fun SettingsScreen(state: AppState.Ready, viewModel: MainViewModel, onBack: () -
                     messenger.show("保存しました")
                 })
             }
+        }
+    }
+
+    if (addingRecurring) {
+        RecurringSheet(state.today, onDismiss = { addingRecurring = false }) { label, amount, day, cat ->
+            viewModel.addRecurring(label, amount, day, cat)
+            messenger.show("「$label」を毎月の決まった出費に追加しました")
         }
     }
 

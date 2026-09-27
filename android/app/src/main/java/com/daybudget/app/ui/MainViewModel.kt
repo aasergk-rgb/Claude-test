@@ -3,7 +3,9 @@ package com.daybudget.app.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.daybudget.app.data.BudgetRepository
+import com.daybudget.app.domain.Category
 import com.daybudget.app.domain.Expense
+import com.daybudget.app.domain.RecurringExpense
 import com.daybudget.app.domain.OnboardingChoices
 import com.daybudget.app.domain.PlannedExpense
 import com.daybudget.app.domain.QuickPreset
@@ -26,15 +28,23 @@ sealed interface AppState {
         val expenses: List<Expense>,
         val today: LocalDate,
         val presets: List<QuickPreset> = emptyList(),
+        /** 予約（手で入れたもの＋決まった出費の分）。isRecurring で見分ける */
         val planned: List<PlannedExpense> = emptyList(),
+        val categories: List<Category> = emptyList(),
+        val recurring: List<RecurringExpense> = emptyList(),
     ) : AppState
 }
 
 class MainViewModel(private val repo: BudgetRepository) : ViewModel() {
     private val today = MutableStateFlow(LocalDate.now())
 
-    val state: StateFlow<AppState> = combine(repo.settings, repo.expenses, today, repo.presets, repo.planned) { s, e, t, p, pl ->
+    private val base = combine(repo.settings, repo.expenses, today, repo.presets, repo.planned) { s, e, t, p, pl ->
         AppState.Ready(s ?: UserSettings(), e, t, p, pl)
+    }
+
+    val state: StateFlow<AppState> = combine(base, repo.categories, repo.recurring) { b, cats, rec ->
+        val virtual = rec.flatMap { it.asPlanned(b.today.minusYears(1), b.today.plusYears(1)) }
+        b.copy(planned = b.planned + virtual, categories = cats, recurring = rec)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AppState.Loading)
 
     init {
@@ -50,7 +60,24 @@ class MainViewModel(private val repo: BudgetRepository) : ViewModel() {
 
     fun refreshToday() {
         today.value = LocalDate.now()
+        viewModelScope.launch {
+            repo.ensureCategories()
+            repo.materializeRecurring(today.value)
+        }
     }
+
+    fun saveCategory(c: Category) = viewModelScope.launch { repo.saveCategory(c) }
+
+    fun addCategory(label: String, icon: String, color: Long) = viewModelScope.launch { repo.addCategory(label, icon, color) }
+
+    fun deleteCategory(id: String) = viewModelScope.launch { repo.deleteCategory(id) }
+
+    fun moveCategory(id: String, up: Boolean) = viewModelScope.launch { repo.moveCategory(id, up) }
+
+    fun addRecurring(label: String, amount: Int, day: Int, categoryId: String) =
+        viewModelScope.launch { repo.addRecurring(label, amount, day, categoryId, today.value) }
+
+    fun deleteRecurring(id: String) = viewModelScope.launch { repo.deleteRecurring(id) }
 
     fun completeOnboarding(choices: OnboardingChoices) = viewModelScope.launch {
         repo.completeOnboarding(choices, today.value)

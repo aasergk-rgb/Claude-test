@@ -43,6 +43,7 @@ import com.daybudget.app.ui.components.SheetTarget
 import com.daybudget.app.ui.screens.DashboardScreen
 import com.daybudget.app.ui.screens.HistoryScreen
 import com.daybudget.app.ui.screens.OnboardingScreen
+import com.daybudget.app.ui.screens.CategoriesScreen
 import com.daybudget.app.ui.screens.PaywallScreen
 import com.daybudget.app.ui.screens.RecapScreen
 import com.daybudget.app.ui.screens.SettingsScreen
@@ -59,6 +60,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val PAYWALL = "paywall"
     const val RECAP = "recap/{end}"
+    const val CATEGORIES = "categories"
 
     /** ウィジェット・通知から「支出を記録」を開くときの行き先 */
     const val ADD = "add"
@@ -133,6 +135,9 @@ fun DayBudgetRoot(viewModel: MainViewModel, requestedRoute: MutableStateFlow<Str
                         }
                         composable(Routes.PAYWALL) {
                             PaywallScreen(onClose = { nav.popBackStack() })
+                        }
+                        composable(Routes.CATEGORIES) {
+                            CategoriesScreen(ready, viewModel, onBack = { nav.popBackStack() })
                         }
                         composable(Routes.RECAP) { entry ->
                             val end = entry.arguments?.getString("end")?.let(java.time.LocalDate::parse) ?: ready.today

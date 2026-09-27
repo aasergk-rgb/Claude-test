@@ -29,6 +29,8 @@ class DayBudgetApp : Application() {
         DailyNotifications.ensureChannel(this)
         WidgetUpdater.scheduleMidnightRefresh(this)
         appScope.launch {
+            repository.ensureCategories()
+            repository.materializeRecurring(java.time.LocalDate.now())
             repository.seedPresetsIfNeeded()
             repository.loadSettings()?.let { DailyNotifications.schedule(this@DayBudgetApp, it) }
         }

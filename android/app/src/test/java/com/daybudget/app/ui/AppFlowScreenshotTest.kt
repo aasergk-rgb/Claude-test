@@ -108,7 +108,7 @@ class AppFlowScreenshotTest {
         shot("06b_dashboard_growth")
 
         rule.onNodeWithContentDescription("履歴").performClick()
-        waitFor("この日に支出を追加")
+        waitFor("累計支出")
         shot("07_history")
         // 予定を入れた日（明日）をカレンダーで選ぶと、予定が見える
         val tomorrow = LocalDate.now().plusDays(1)

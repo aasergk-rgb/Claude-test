@@ -70,21 +70,62 @@ interface BudgetDao {
     @Query("DELETE FROM planned_expenses")
     suspend fun deleteAllPlanned()
 
+    @Query("SELECT * FROM categories ORDER BY order_num")
+    fun observeCategories(): Flow<List<CategoryEntity>>
+
+    @Query("SELECT * FROM categories ORDER BY order_num")
+    suspend fun getCategories(): List<CategoryEntity>
+
+    @Upsert
+    suspend fun upsertCategories(categories: List<CategoryEntity>)
+
+    @Query("DELETE FROM categories WHERE id = :id AND built_in = 0")
+    suspend fun deleteCategory(id: String)
+
+    @Query("DELETE FROM categories")
+    suspend fun deleteAllCategories()
+
+    @Query("SELECT * FROM recurring_expenses ORDER BY day_of_month")
+    fun observeRecurring(): Flow<List<RecurringEntity>>
+
+    @Query("SELECT * FROM recurring_expenses ORDER BY day_of_month")
+    suspend fun getRecurring(): List<RecurringEntity>
+
+    @Upsert
+    suspend fun upsertRecurring(recurring: RecurringEntity)
+
+    @Query("DELETE FROM recurring_expenses WHERE id = :id")
+    suspend fun deleteRecurring(id: String)
+
+    @Query("DELETE FROM recurring_expenses")
+    suspend fun deleteAllRecurring()
+
     @Transaction
     suspend fun resetAll() {
         deleteAllExpenses()
         deleteAllPresets()
         deleteAllPlanned()
+        deleteAllRecurring()
+        deleteAllCategories()
         deleteSettings()
     }
 
     /** バックアップから丸ごと置き換える */
     @Transaction
-    suspend fun replaceAll(settings: SettingsEntity, expenses: List<ExpenseEntity>, presets: List<PresetEntity>, planned: List<PlannedEntity>) {
+    suspend fun replaceAll(
+        settings: SettingsEntity,
+        expenses: List<ExpenseEntity>,
+        presets: List<PresetEntity>,
+        planned: List<PlannedEntity>,
+        categories: List<CategoryEntity>,
+        recurring: List<RecurringEntity>,
+    ) {
         resetAll()
         upsertSettings(settings)
         expenses.forEach { insertExpense(it) }
         presets.forEach { insertPreset(it) }
         planned.forEach { insertPlanned(it) }
+        if (categories.isNotEmpty()) upsertCategories(categories)
+        recurring.forEach { upsertRecurring(it) }
     }
 }

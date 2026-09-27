@@ -18,6 +18,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.TextAlign
+import com.daybudget.app.domain.isIncome
+import com.daybudget.app.domain.isRecurring
 import com.daybudget.app.domain.reachedMilestone
 import com.daybudget.app.ui.UiPrefs
 import com.daybudget.app.ui.components.LocalFly
@@ -87,6 +89,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.daybudget.app.domain.BudgetCalculator
 import com.daybudget.app.domain.Categories
+import com.daybudget.app.domain.Category
 import com.daybudget.app.domain.CarryoverMode
 import com.daybudget.app.domain.DayState
 import com.daybudget.app.domain.Expense
@@ -133,7 +136,10 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
     val snap = remember(state) { BudgetCalculator.computeToday(state.settings, state.expenses, state.today, state.planned) }
     val days = remember(state) { BudgetCalculator.simulatePeriod(snap.period, state.settings, state.expenses, state.today, state.planned) }
     val streak = remember(state) { BudgetCalculator.underBudgetStreak(state.settings, state.expenses, state.today, state.planned) }
-    val upcoming = remember(state) { state.planned.filter { !it.date.isBefore(state.today) }.sortedBy { it.date } }
+    val upcoming = remember(state) {
+        val end = Period.of(state.today, state.settings.closingDay).end
+        state.planned.filter { !it.date.isBefore(state.today) && (!it.isRecurring || !it.date.isAfter(end)) }.sortedBy { it.date }
+    }
     val todays = remember(state) { state.expenses.filter { it.date == state.today }.sortedByDescending { it.createdAt } }
     var addingPlan by remember { mutableStateOf(false) }
     var plansOpen by remember { mutableStateOf(prefs.plansExpanded) }
@@ -409,7 +415,11 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
                                     Text(if (p.date == state.today) "今日" else p.date.md(), color = c.muted, fontSize = 12.sp, style = MonoStyle, modifier = Modifier.width(48.dp))
                                     Text(p.label, color = c.ink, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(formatYen(p.amount), color = c.ink, fontSize = 14.sp, style = MonoStyle)
-                                    DbIconButton(DbIcons.Close, "予定を削除", onClick = { viewModel.deletePlanned(p.id) }, tint = c.faint, modifier = Modifier.size(40.dp))
+                                    if (p.isRecurring) {
+                                        Text("毎月", color = c.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp))
+                                    } else {
+                                        DbIconButton(DbIcons.Close, "予定を削除", onClick = { viewModel.deletePlanned(p.id) }, tint = c.faint, modifier = Modifier.size(40.dp))
+                                    }
                                 }
                             }
                             HorizontalDivider(color = c.line)
@@ -468,7 +478,7 @@ fun DashboardScreen(state: AppState.Ready, viewModel: MainViewModel, openSheet: 
 }
 
 @Composable
-private fun QuickChip(text: String, category: Categories?, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun QuickChip(text: String, category: Category?, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val c = Db.colors
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -515,7 +525,8 @@ fun ExpenseItem(
             Text(cat.label, color = c.ink, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             Text(subtitle, color = c.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(formatYen(e.amount), color = c.ink, fontSize = 15.sp, style = MonoStyle)
+        if (e.isIncome) Text("+" + formatYen(-e.amount), color = c.great, fontSize = 15.sp, style = MonoStyle)
+        else Text(formatYen(e.amount), color = c.ink, fontSize = 15.sp, style = MonoStyle)
         DbIconButton(actionIcon, actionDescription, onClick = onAction, tint = c.faint, modifier = Modifier.size(40.dp).semantics { contentDescription = actionDescription })
     }
 }

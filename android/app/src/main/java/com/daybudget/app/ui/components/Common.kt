@@ -37,7 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.daybudget.app.domain.Categories
+import com.daybudget.app.domain.Category
 import com.daybudget.app.ui.icons.DbIcons
 import com.daybudget.app.ui.theme.Db
 
@@ -111,7 +111,7 @@ fun GhostButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier
 }
 
 @Composable
-fun CategoryIcon(category: Categories, size: Dp = 40.dp) {
+fun CategoryIcon(category: Category, size: Dp = 40.dp) {
     val color = Color(category.color)
     Box(
         Modifier.size(size).clip(RoundedCornerShape(size * 0.3f)).background(color.copy(alpha = 0.15f)),

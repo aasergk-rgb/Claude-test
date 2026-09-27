@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.daybudget.app.domain.Categories
 import com.daybudget.app.domain.Expense
+import com.daybudget.app.domain.isIncome
 import com.daybudget.app.domain.formatNumber
 import com.daybudget.app.domain.formatYen
 import com.daybudget.app.domain.longJa
@@ -95,7 +96,9 @@ fun ExpenseSheet(target: SheetTarget, state: AppState.Ready, viewModel: MainView
     val fly = LocalFly.current
     var amountCenter by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
 
-    var digits by rememberSaveable(target) { mutableStateOf(editing?.amount?.toString() ?: "") }
+    var digits by rememberSaveable(target) { mutableStateOf(editing?.amount?.let { kotlin.math.abs(it).toString() } ?: "") }
+    // 収入・返金はマイナスの支出として保存する
+    var income by rememberSaveable(target) { mutableStateOf(editing?.isIncome ?: false) }
     var categoryId by rememberSaveable(target) { mutableStateOf(editing?.categoryId ?: state.settings.lastCategoryId) }
     var memo by rememberSaveable(target) { mutableStateOf(editing?.memo ?: "") }
     var date by remember(target) { mutableStateOf(editing?.date ?: (target as SheetTarget.Add).date) }
@@ -109,19 +112,20 @@ fun ExpenseSheet(target: SheetTarget, state: AppState.Ready, viewModel: MainView
 
     fun submit() {
         if (amount <= 0) return
-        val cat = Categories.of(categoryId)
+        val signed = if (income) -amount else amount
+        val cat = if (income) Categories.INCOME.id else categoryId
         val note = memo.trim().ifEmpty { null }
         if (editing != null) {
-            viewModel.updateExpense(editing.id, amount, categoryId, note, date)
+            viewModel.updateExpense(editing.id, signed, cat, note, date)
             messenger.show("変更しました")
         } else {
-            viewModel.addExpense(amount, categoryId, note, date)
-            messenger.show("${cat.label} ${formatYen(amount)} を記録しました")
+            viewModel.addExpense(signed, cat, note, date)
+            messenger.show(if (income) "+${formatYen(amount)} を予算に足しました" else "${Categories.of(cat).label} ${formatYen(amount)} を記録しました")
         }
         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
         val from = amountCenter
         // シートが閉じてから、金額を「今日使えるお金」へ飛ばす（今日の記録のときだけ）
-        close { if (editing == null && date == state.today) fly.launch(amount, from) }
+        close { if (editing == null && date == state.today) fly.launch(signed, from) }
     }
 
     fun remove() {
@@ -148,7 +152,15 @@ fun ExpenseSheet(target: SheetTarget, state: AppState.Ready, viewModel: MainView
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (editing != null) "支出を編集" else "支出を記録", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.ink)
+                Text(
+                    when {
+                        editing != null && income -> "収入・返金を編集"
+                        editing != null -> "支出を編集"
+                        income -> "収入・返金を記録"
+                        else -> "支出を記録"
+                    },
+                    fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.ink,
+                )
                 Spacer(Modifier.weight(1f))
                 Text(
                     (if (date == state.today) "今日 " else "") + date.longJa(),
@@ -179,12 +191,21 @@ fun ExpenseSheet(target: SheetTarget, state: AppState.Ready, viewModel: MainView
                 )
             }
 
-            CategoryGrid(categoryId) { categoryId = it }
+            SegmentedControl(listOf(false to "支出", true to "収入・返金"), income, onSelect = { income = it })
+
+            if (income) {
+                Text(
+                    "ボーナス、フリマの売上、返金など。今日使えるお金に足され、使わなければ明日以降に回ります。",
+                    color = c.muted, fontSize = 12.sp, lineHeight = 18.sp,
+                )
+            } else {
+                CategoryGrid(categoryId) { categoryId = it }
+            }
 
             OutlinedTextField(
                 value = memo,
                 onValueChange = { if (it.length <= 40) memo = it },
-                placeholder = { Text("メモ（任意）例：コンビニ", color = c.faint) },
+                placeholder = { Text(if (income) "メモ（任意）例：フリマの売上" else "メモ（任意）例：コンビニ", color = c.faint) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -275,6 +296,7 @@ private fun CategoryGrid(selected: String, onSelect: (String) -> Unit) {
                         Text(cat.label, color = c.ink, fontSize = 12.sp, fontWeight = FontWeight.Bold, lineHeight = 14.sp)
                     }
                 }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }

@@ -1,6 +1,9 @@
 package com.daybudget.app.data
 
+import com.daybudget.app.domain.Categories
+import com.daybudget.app.domain.Category
 import com.daybudget.app.domain.DEFAULT_PRESETS
+import com.daybudget.app.domain.RecurringExpense
 import com.daybudget.app.domain.Expense
 import com.daybudget.app.domain.MAX_PRESETS
 import com.daybudget.app.domain.OnboardingChoices
@@ -27,6 +30,91 @@ class BudgetRepository(
     val presets: Flow<List<QuickPreset>> = dao.observePresets().map { list -> list.map { it.toDomain() } }
 
     val planned: Flow<List<PlannedExpense>> = dao.observePlanned().map { list -> list.map { it.toDomain() } }
+
+    /** カテゴリ（変わるたびに全体の一覧 Categories にも反映する） */
+    val categories: Flow<List<Category>> = dao.observeCategories().map { list ->
+        list.map { it.toDomain() }.also(Categories::update)
+    }
+
+    val recurring: Flow<List<RecurringExpense>> = dao.observeRecurring().map { list -> list.map { it.toDomain() } }
+
+    suspend fun loadCategories(): List<Category> = dao.getCategories().map { it.toDomain() }.also(Categories::update)
+
+    suspend fun loadRecurring(): List<RecurringExpense> = dao.getRecurring().map { it.toDomain() }
+
+    /** 予約（手で入れたもの＋決まった出費の分）。計算にはこちらを使う */
+    suspend fun loadAllPlanned(today: LocalDate): List<PlannedExpense> =
+        loadPlanned() + loadRecurring().flatMap { it.asPlanned(today.minusYears(1), today.plusYears(1)) }
+
+    /** カテゴリが空なら最初の6つを入れる */
+    suspend fun ensureCategories() {
+        if (dao.getCategories().isEmpty()) dao.upsertCategories(Categories.DEFAULTS.map { it.toEntity() })
+        loadCategories()
+    }
+
+    suspend fun saveCategory(category: Category) {
+        dao.upsertCategories(listOf(category.toEntity()))
+        loadCategories()
+        onDataChanged()
+    }
+
+    suspend fun addCategory(label: String, icon: String, color: Long): Category {
+        val order = (dao.getCategories().maxOfOrNull { it.order } ?: -1) + 1
+        val c = Category("c_" + UUID.randomUUID().toString().take(8), label, color, icon, order)
+        dao.upsertCategories(listOf(c.toEntity()))
+        loadCategories()
+        onDataChanged()
+        return c
+    }
+
+    /** 自分で作ったカテゴリを消す（そのカテゴリの支出は「その他」として表示される） */
+    suspend fun deleteCategory(id: String) {
+        dao.deleteCategory(id)
+        loadCategories()
+        onDataChanged()
+    }
+
+    /** 並び順を1つ上げ下げする */
+    suspend fun moveCategory(id: String, up: Boolean) {
+        val list = dao.getCategories().sortedBy { it.order }.toMutableList()
+        val i = list.indexOfFirst { it.id == id }
+        val j = if (up) i - 1 else i + 1
+        if (i < 0 || j !in list.indices) return
+        list[i] = list[j].also { list[j] = list[i] }
+        dao.upsertCategories(list.mapIndexed { index, c -> c.copy(order = index) })
+        loadCategories()
+        onDataChanged()
+    }
+
+    suspend fun addRecurring(label: String, amount: Int, dayOfMonth: Int, categoryId: String, today: LocalDate) {
+        val r = RecurringExpense(UUID.randomUUID().toString(), label, amount, dayOfMonth, categoryId, RecurringExpense.firstStart(today))
+        dao.upsertRecurring(r.toEntity())
+        onDataChanged()
+    }
+
+    suspend fun deleteRecurring(id: String) {
+        dao.deleteRecurring(id)
+        onDataChanged()
+    }
+
+    /** 支払日を迎えた決まった出費を、支出として自動で記録する。記録した件数を返す */
+    suspend fun materializeRecurring(today: LocalDate): Int {
+        var count = 0
+        for (r in loadRecurring()) {
+            val from = r.lastRecorded?.plusDays(1) ?: r.startDate
+            val dates = r.occurrences(from, today)
+            dates.forEach { date ->
+                val now = clock()
+                dao.insertExpense(Expense(UUID.randomUUID().toString(), r.amount, r.categoryId, r.label, date, now, now).toEntity())
+            }
+            if (dates.isNotEmpty() || r.lastRecorded == null || r.lastRecorded.isBefore(today)) {
+                dao.upsertRecurring(r.copy(lastRecorded = maxOf(today, r.startDate.minusDays(1))).toEntity())
+            }
+            count += dates.size
+        }
+        if (count > 0) onDataChanged()
+        return count
+    }
 
     suspend fun loadSettings(): UserSettings? = dao.getSettings()?.toDomain()
 
@@ -74,13 +162,14 @@ class BudgetRepository(
     }
 
     suspend fun exportBackup(): String = Backup.encode(
-        dao.getSettings(), dao.getExpenses(), dao.getPresets(), dao.getPlanned(),
+        dao.getSettings(), dao.getExpenses(), dao.getPresets(), dao.getPlanned(), dao.getCategories(), dao.getRecurring(),
     )
 
     /** バックアップを読み込んで、今のデータと置き換える */
     suspend fun importBackup(json: String) {
         val b = Backup.decode(json)
-        dao.replaceAll(b.settings, b.expenses, b.presets, b.planned)
+        dao.replaceAll(b.settings, b.expenses, b.presets, b.planned, b.categories, b.recurring)
+        ensureCategories()
         onDataChanged()
     }
 
@@ -154,6 +243,7 @@ class BudgetRepository(
 
     suspend fun resetAll() {
         dao.resetAll()
+        ensureCategories()
         onDataChanged()
     }
 }

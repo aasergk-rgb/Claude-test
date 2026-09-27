@@ -46,7 +46,7 @@ data class PeriodRecap(
     val underDays: Int,
     val activeDays: Int,
     val longestStreak: Int,
-    val topCategory: Categories?,
+    val topCategory: Category?,
     val topCategoryAmount: Int,
     val days: List<DaySummary>,
 )
@@ -82,6 +82,24 @@ data class TodaySnapshot(
 
 object BudgetCalculator {
 
+    /** 日ごとの重み（週末ブーストがオンなら週末だけ重い） */
+    fun weightOf(settings: UserSettings, date: LocalDate): Long =
+        if (settings.weekendBoostPct > 100 && date.dayOfWeek.value in settings.weekendDays) settings.weekendBoostPct.toLong() else 100L
+
+    private fun weightSum(settings: UserSettings, from: LocalDate, to: LocalDate): Long {
+        var sum = 0L
+        var d = from
+        while (!d.isAfter(to)) {
+            sum += weightOf(settings, d)
+            d = d.plusDays(1)
+        }
+        return sum
+    }
+
+    /** 貯金プールモードの、その日の固定の割当 */
+    private fun fixedBudget(settings: UserSettings, period: Period, date: LocalDate): Int =
+        Math.floorDiv(settings.monthlyBudget.toLong() * weightOf(settings, date), weightSum(settings, period.start, period.end)).toInt()
+
     fun activeRange(period: Period, monthlyBudget: Int, startDate: LocalDate?): ActiveRange {
         if (startDate == null || !startDate.isAfter(period.start) || startDate.isAfter(period.end)) {
             return ActiveRange(period.start, period.days, monthlyBudget)
@@ -106,16 +124,17 @@ object BudgetCalculator {
     ): List<DaySummary> {
         val totals = totalsByDate(expenses)
         val range = activeRange(period, settings.monthlyBudget, settings.startDate)
-        val fixed = settings.monthlyBudget / period.days
         val reserves = reservesByDate(planned, range.from, period.end)
         var remaining = range.budget
-        var left = range.days
         return period.dates().map { date ->
             if (date.isBefore(range.from)) return@map DaySummary(date, 0, 0, DayState.INACTIVE)
             val spent = if (date.isAfter(today)) 0 else totals[date] ?: 0
-            val budget = if (settings.carryoverMode == CarryoverMode.SAVINGS) fixed else distributeBudget(remaining, left, date, reserves)
+            val budget = if (settings.carryoverMode == CarryoverMode.SAVINGS) {
+                fixedBudget(settings, period, date)
+            } else {
+                distributeBudget(settings, remaining, date, period.end, reserves)
+            }
             remaining -= spent
-            left -= 1
             val state = when {
                 date.isAfter(today) -> DayState.FUTURE
                 date == today -> DayState.TODAY
@@ -130,10 +149,12 @@ object BudgetCalculator {
      * 予約した出費を考慮した、その日の割当。
      * 先の日の予約はあらかじめ取り分けておき、予約日当日の割当にだけ上乗せする。
      */
-    private fun distributeBudget(remaining: Int, left: Int, date: LocalDate, reserves: Map<LocalDate, Int>): Int {
+    private fun distributeBudget(settings: UserSettings, remaining: Int, date: LocalDate, end: LocalDate, reserves: Map<LocalDate, Int>): Int {
         val onDay = reserves[date] ?: 0
         val ahead = reserves.filterKeys { it.isAfter(date) }.values.sum()
-        return maxOf(0, floorDiv(remaining - ahead - onDay, left)) + onDay
+        val regular = (remaining - ahead - onDay).toLong()
+        val share = Math.floorDiv(regular * weightOf(settings, date), weightSum(settings, date, end))
+        return maxOf(0, share.toInt()) + onDay
     }
 
     private fun reservesByDate(planned: List<PlannedExpense>, from: LocalDate, to: LocalDate): Map<LocalDate, Int> =
@@ -169,7 +190,10 @@ object BudgetCalculator {
         if (yesterday.state != DayState.UNDER) return 0
         val todayDay = days.first { it.date == today }
         fun reserved(d: LocalDate) = planned.filter { it.date == d }.sumOf { it.amount }
-        return maxOf(0, (todayDay.budget - reserved(today)) - (yesterday.budget - reserved(yesterday.date)))
+        // 週末ブーストで割当が変わる分は除き、今日の重みに換算して比べる
+        val todayRegular = (todayDay.budget - reserved(today)).toLong()
+        val yesterdayRegular = (yesterday.budget - reserved(yesterday.date)).toLong() * weightOf(settings, today) / weightOf(settings, yesterday.date)
+        return maxOf(0, (todayRegular - yesterdayRegular).toInt())
     }
 
     fun recap(period: Period, settings: UserSettings, expenses: List<Expense>, today: LocalDate, planned: List<PlannedExpense> = emptyList()): PeriodRecap {
@@ -180,6 +204,7 @@ object BudgetCalculator {
         var run = 0
         counted.forEach { d -> if (d.spent <= d.budget) { run++; longest = maxOf(longest, run) } else run = 0 }
         val byCategory = expenses.filter { !it.date.isBefore(range.from) && !it.date.isAfter(period.end) }
+            .filter { !it.isIncome }
             .groupingBy { it.categoryId }.fold(0) { acc, e -> acc + e.amount }
             .maxByOrNull { it.value }
         val spent = days.sumOf { it.spent }
@@ -196,6 +221,13 @@ object BudgetCalculator {
             days = days,
         )
     }
+
+    /** 期間中のカテゴリ別の支出（多い順。収入・返金は含めない） */
+    fun categoryTotals(expenses: List<Expense>, from: LocalDate, to: LocalDate): List<Pair<Category, Int>> =
+        expenses.filter { !it.isIncome && !it.date.isBefore(from) && !it.date.isAfter(to) }
+            .groupingBy { Categories.of(it.categoryId).id }.fold(0) { acc, e -> acc + e.amount }
+            .map { (id, total) -> Categories.of(id) to total }
+            .sortedByDescending { it.second }
 
     fun computeToday(
         settings: UserSettings,
@@ -219,14 +251,14 @@ object BudgetCalculator {
         val tomorrowBudget: Int?
         var savingsAmount = 0
         if (settings.carryoverMode == CarryoverMode.SAVINGS) {
-            dailyBudget = settings.monthlyBudget / period.days
-            tomorrowBudget = if (remainingDays > 1) dailyBudget else null
+            dailyBudget = fixedBudget(settings, period, today)
+            tomorrowBudget = if (remainingDays > 1) fixedBudget(settings, period, today.plusDays(1)) else null
             simulatePeriod(period, settings, expenses, today, planned)
                 .filter { it.state == DayState.UNDER || it.state == DayState.OVER }
                 .forEach { savingsAmount += maxOf(0, it.budget - it.spent) }
         } else {
-            dailyBudget = distributeBudget(remainingAtStart, remainingDays, today, reserves)
-            tomorrowBudget = if (remainingDays > 1) distributeBudget(remainingAtStart - todaySpent, remainingDays - 1, today.plusDays(1), reserves) else null
+            dailyBudget = distributeBudget(settings, remainingAtStart, today, period.end, reserves)
+            tomorrowBudget = if (remainingDays > 1) distributeBudget(settings, remainingAtStart - todaySpent, today.plusDays(1), period.end, reserves) else null
         }
 
         return TodaySnapshot(
@@ -249,5 +281,4 @@ object BudgetCalculator {
         )
     }
 
-    private fun floorDiv(a: Int, b: Int) = Math.floorDiv(a, b)
 }

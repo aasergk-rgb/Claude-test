@@ -67,7 +67,58 @@ data class UserSettings(
     val lastRecapEnd: LocalDate? = null,
     /** よく使う金額の初期値を入れたか（全部消した人に再度入れないため） */
     val presetsSeeded: Boolean = false,
+    /** 週末ブースト（%）。100 ならオフ。125 なら週末は平日の 1.25 倍を割り当てる */
+    val weekendBoostPct: Int = 100,
+    /** 週末として扱う曜日（ISO: 月=1 … 日=7） */
+    val weekendDays: Set<Int> = setOf(6, 7),
 )
+
+/**
+ * 毎月決まった日に出ていくお金（サブスクなど）。
+ * その日までは予約として取り分け、当日になったら自動で支出として記録する。
+ */
+data class RecurringExpense(
+    val id: String,
+    val label: String,
+    val amount: Int,
+    /** 1〜31。月の日数を超える場合は末日 */
+    val dayOfMonth: Int,
+    val categoryId: String,
+    /** この日以降の分から記録する */
+    val startDate: LocalDate,
+    /** 最後に自動記録した日 */
+    val lastRecorded: LocalDate? = null,
+) {
+    /** from〜to（両端を含む）に来る支払日 */
+    fun occurrences(from: LocalDate, to: LocalDate): List<LocalDate> {
+        val begin = maxOf(from, startDate)
+        if (begin.isAfter(to)) return emptyList()
+        val out = mutableListOf<LocalDate>()
+        var ym = java.time.YearMonth.from(begin)
+        val last = java.time.YearMonth.from(to)
+        while (!ym.isAfter(last)) {
+            val d = ym.atDay(minOf(dayOfMonth, ym.lengthOfMonth()))
+            if (!d.isBefore(begin) && !d.isAfter(to)) out += d
+            ym = ym.plusMonths(1)
+        }
+        return out
+    }
+
+    /** 計算で使う予約（id は「rec:元のid:日付」） */
+    fun asPlanned(from: LocalDate, to: LocalDate): List<PlannedExpense> =
+        occurrences(from, to).map { PlannedExpense("rec:$id:$it", label, amount, it) }
+
+    companion object {
+        /** 追加した日の翌日以降の支払日から数える */
+        fun firstStart(today: LocalDate): LocalDate = today.plusDays(1)
+    }
+}
+
+/** 決まった出費から作った予約か */
+val PlannedExpense.isRecurring: Boolean get() = id.startsWith("rec:")
+
+/** 収入・返金（マイナスの支出）か */
+val Expense.isIncome: Boolean get() = amount < 0
 
 /** よく使う金額（ウィジェットとアプリから1タップで記録） */
 data class QuickPreset(

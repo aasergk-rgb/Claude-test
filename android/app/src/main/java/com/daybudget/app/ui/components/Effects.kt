@@ -91,8 +91,9 @@ private fun FlyingAmount(f: FlyController.Flight, reduce: Boolean, onLanded: () 
     val p = progress.value
     val x = f.from.x + (f.to.x - f.from.x) * p
     val y = f.from.y + (f.to.y - f.from.y) * p - sin(p * PI).toFloat() * arc
+    val income = f.amount < 0
     Text(
-        "−" + formatYen(f.amount),
+        if (income) "+" + formatYen(-f.amount) else "−" + formatYen(f.amount),
         Modifier
             .layout { measurable, constraints ->
                 val placeable = measurable.measure(constraints)
@@ -106,7 +107,7 @@ private fun FlyingAmount(f: FlyController.Flight, reduce: Boolean, onLanded: () 
                 scaleY = s
                 alpha = if (p < 0.75f) 1f else (1f - p) / 0.25f
             },
-        color = Db.colors.over,
+        color = if (income) Db.colors.great else Db.colors.over,
         fontFamily = DisplayFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 34.sp,

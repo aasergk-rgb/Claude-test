@@ -8,16 +8,25 @@ import org.json.JSONObject
  * 自分で書き出すだけで、アプリから外部には送信しない。
  */
 object Backup {
-    const val VERSION = 1
+    const val VERSION = 2
 
     class Contents(
         val settings: SettingsEntity,
         val expenses: List<ExpenseEntity>,
         val presets: List<PresetEntity>,
         val planned: List<PlannedEntity>,
+        val categories: List<CategoryEntity> = emptyList(),
+        val recurring: List<RecurringEntity> = emptyList(),
     )
 
-    fun encode(settings: SettingsEntity?, expenses: List<ExpenseEntity>, presets: List<PresetEntity>, planned: List<PlannedEntity>): String {
+    fun encode(
+        settings: SettingsEntity?,
+        expenses: List<ExpenseEntity>,
+        presets: List<PresetEntity>,
+        planned: List<PlannedEntity>,
+        categories: List<CategoryEntity> = emptyList(),
+        recurring: List<RecurringEntity> = emptyList(),
+    ): String {
         val root = JSONObject()
             .put("app", "DayBudget")
             .put("version", VERSION)
@@ -25,6 +34,8 @@ object Backup {
             .put("expenses", JSONArray(expenses.map { JSONObject().put("id", it.id).put("amount", it.amount).put("category_id", it.categoryId).put("memo", it.memo ?: JSONObject.NULL).put("date", it.date).put("created_at", it.createdAt).put("updated_at", it.updatedAt) }))
             .put("presets", JSONArray(presets.map { JSONObject().put("id", it.id).put("label", it.label).put("amount", it.amount).put("category_id", it.categoryId).put("order", it.order) }))
             .put("planned", JSONArray(planned.map { JSONObject().put("id", it.id).put("label", it.label).put("amount", it.amount).put("date", it.date) }))
+            .put("categories", JSONArray(categories.map { JSONObject().put("id", it.id).put("name", it.name).put("icon", it.icon).put("color", it.color).put("order", it.order).put("hidden", it.hidden).put("built_in", it.builtIn) }))
+            .put("recurring", JSONArray(recurring.map { JSONObject().put("id", it.id).put("label", it.label).put("amount", it.amount).put("day_of_month", it.dayOfMonth).put("category_id", it.categoryId).put("start_date", it.startDate).put("last_recorded", it.lastRecorded ?: JSONObject.NULL) }))
         return root.toString(2)
     }
 
@@ -37,6 +48,7 @@ object Backup {
         .put("evening_notify", s.eveningNotify).put("evening_time", s.eveningTime)
         .put("notify_prompt_dismissed", s.notifyPromptDismissed).put("last_recap_end", s.lastRecapEnd ?: JSONObject.NULL)
         .put("presets_seeded", s.presetsSeeded)
+        .put("weekend_boost_pct", s.weekendBoostPct).put("weekend_days", s.weekendDays)
 
     /** 不正なファイルなら IllegalArgumentException */
     fun decode(json: String): Contents {
@@ -54,6 +66,8 @@ object Backup {
             eveningNotify = s.optBoolean("evening_notify"), eveningTime = s.optInt("evening_time", 1260),
             notifyPromptDismissed = s.optBoolean("notify_prompt_dismissed"), lastRecapEnd = if (s.has("last_recap_end")) s.str("last_recap_end") else null,
             presetsSeeded = s.optBoolean("presets_seeded", true),
+            weekendBoostPct = s.optInt("weekend_boost_pct", 100),
+            weekendDays = s.optString("weekend_days", "6,7"),
         )
         fun JSONArray.objects() = (0 until length()).map { getJSONObject(it) }
         return Contents(
@@ -66,6 +80,12 @@ object Backup {
             } ?: emptyList(),
             planned = root.optJSONArray("planned")?.objects()?.map {
                 PlannedEntity(it.getString("id"), it.getString("label"), it.getInt("amount"), it.getString("date"))
+            } ?: emptyList(),
+            categories = root.optJSONArray("categories")?.objects()?.map {
+                CategoryEntity(it.getString("id"), it.getString("name"), it.getString("icon"), it.getLong("color"), it.getInt("order"), it.optBoolean("hidden"), it.optBoolean("built_in"))
+            } ?: emptyList(),
+            recurring = root.optJSONArray("recurring")?.objects()?.map {
+                RecurringEntity(it.getString("id"), it.getString("label"), it.getInt("amount"), it.getInt("day_of_month"), it.getString("category_id"), it.getString("start_date"), it.str("last_recorded"))
             } ?: emptyList(),
         )
     }

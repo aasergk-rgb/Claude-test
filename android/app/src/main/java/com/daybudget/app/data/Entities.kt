@@ -28,6 +28,32 @@ data class SettingsEntity(
     @ColumnInfo(name = "notify_prompt_dismissed", defaultValue = "0") val notifyPromptDismissed: Boolean = false,
     @ColumnInfo(name = "last_recap_end") val lastRecapEnd: String? = null,
     @ColumnInfo(name = "presets_seeded", defaultValue = "0") val presetsSeeded: Boolean = false,
+    @ColumnInfo(name = "weekend_boost_pct", defaultValue = "100") val weekendBoostPct: Int = 100,
+    /** 週末の曜日（ISO の番号をカンマ区切り。例: "6,7"） */
+    @ColumnInfo(name = "weekend_days", defaultValue = "6,7") val weekendDays: String = "6,7",
+)
+
+/** カテゴリマスタ（設計書 §4 ③） */
+@Entity(tableName = "categories")
+data class CategoryEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val icon: String,
+    val color: Long,
+    @ColumnInfo(name = "order_num") val order: Int,
+    @ColumnInfo(defaultValue = "0") val hidden: Boolean = false,
+    @ColumnInfo(name = "built_in", defaultValue = "0") val builtIn: Boolean = false,
+)
+
+@Entity(tableName = "recurring_expenses")
+data class RecurringEntity(
+    @PrimaryKey val id: String,
+    val label: String,
+    val amount: Int,
+    @ColumnInfo(name = "day_of_month") val dayOfMonth: Int,
+    @ColumnInfo(name = "category_id") val categoryId: String,
+    @ColumnInfo(name = "start_date") val startDate: String,
+    @ColumnInfo(name = "last_recorded") val lastRecorded: String? = null,
 )
 
 @Entity(tableName = "quick_presets")

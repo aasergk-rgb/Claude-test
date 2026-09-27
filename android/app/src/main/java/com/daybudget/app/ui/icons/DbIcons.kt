@@ -7,7 +7,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
-import com.daybudget.app.domain.Categories
+import com.daybudget.app.domain.Category
 
 /** Web版と同じ線画アイコン（24x24、線幅1.9） */
 object DbIcons {
@@ -49,12 +49,37 @@ object DbIcons {
     private val fun_ = icon("fun", "M5 6h14a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3z", "M6 12h4M8 10v4M15 13h.01M18 11h.01")
     private val other = icon("other", "M5 12h.01M12 12h.01M19 12h.01", width = 4f)
 
-    fun category(c: Categories): ImageVector = when (c) {
-        Categories.FOOD -> food
-        Categories.CAFE -> cafe
-        Categories.DAILY -> daily
-        Categories.TRANSPORT -> transport
-        Categories.FUN -> fun_
-        Categories.OTHER -> other
+    private val income = icon("income", "M12 5v14M5 12h14", "M4 12a8 8 0 1 0 16 0a8 8 0 1 0-16 0")
+    private val heart = icon("heart", "M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z")
+    private val gift = icon("gift", "M4 10h16v10H4zM3 7h18v3H3zM12 7v13", "M12 7c-2-3-5-3-5-1s3 1 5 1c2 0 5 1 5-1s-3-2-5 1")
+    private val book = icon("book", "M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z", "M5 17a3 3 0 0 1 3-3h10")
+    private val beauty = icon("beauty", "M6 6a2.5 2.5 0 1 0 0.01 0M6 16a2.5 2.5 0 1 0 0.01 0", "M8 7.5L20 18M8 14.5L20 4")
+    private val health = icon("health", "M9 3h6v6h6v6h-6v6H9v-6H3V9h6z")
+    private val phone = icon("phone", "M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z", "M11 18h2")
+    private val pet = icon("pet", "M12 20c-3 0-5-1.5-5-3.5S9.5 12 12 12s5 2.5 5 4.5S15 20 12 20z", "M6 10h.01M9 6h.01M15 6h.01M18 10h.01", width = 4f)
+    private val home = icon("home", "M4 11l8-7 8 7v9H4z", "M10 20v-5h4v5")
+    private val drink = icon("drink", "M6 3h12l-2 18H8z", "M6.6 8h10.8")
+    private val shirt = icon("shirt", "M8 3l-5 3 2 4 3-1v12h8V9l3 1 2-4-5-3a4 4 0 0 1-8 0z")
+
+    fun category(c: Category): ImageVector = when (c.icon) {
+        "food" -> food
+        "cafe" -> cafe
+        "daily" -> daily
+        "transport" -> transport
+        "fun" -> fun_
+        "income" -> income
+        "heart" -> heart
+        "gift" -> gift
+        "book" -> book
+        "beauty" -> beauty
+        "health" -> health
+        "phone" -> phone
+        "pet" -> pet
+        "home" -> home
+        "drink" -> drink
+        "shirt" -> shirt
+        else -> other
     }
+
+    fun categoryIcon(key: String): ImageVector = category(Category("", "", 0, key))
 }

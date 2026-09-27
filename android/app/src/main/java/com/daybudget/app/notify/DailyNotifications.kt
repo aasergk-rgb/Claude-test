@@ -158,10 +158,12 @@ class NotificationReceiver : BroadcastReceiver() {
         app.appScope.launch {
             try {
                 val repo = app.repository
+                repo.materializeRecurring(LocalDate.now())
+                repo.loadCategories()
                 val settings = repo.loadSettings() ?: return@launch
                 val enabled = if (kind == DailyNotifications.Kind.MORNING) settings.morningNotify else settings.eveningNotify
                 if (enabled && settings.onboarded) {
-                    val msg = DailyNotifications.message(kind, settings, repo.loadExpenses(), repo.loadPlanned(), LocalDate.now())
+                    val msg = DailyNotifications.message(kind, settings, repo.loadExpenses(), repo.loadAllPlanned(LocalDate.now()), LocalDate.now())
                     DailyNotifications.post(context, kind, msg)
                 }
                 DailyNotifications.schedule(context, settings)
